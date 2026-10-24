@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: 'Chivo', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+@layer base {
+  :root {
+    --bg-void: #08040d;
+    --bg-surface: #10071c;
+    --bg-card: rgba(16, 7, 28, 0.85);
+    
+    --purple-primary: #9333ea;
+    --purple-vivid: #a855f7;
+    --purple-dim: rgba(168, 85, 247, 0.12);
+    --purple-border: rgba(168, 85, 247, 0.22);
+
+    --gold-primary: #eab308;
+    --gold-vivid: #facc15;
+    --gold-dim: rgba(234, 179, 8, 0.14);
+    --gold-border: rgba(234, 179, 8, 0.28);
+
+    --border-hairline: rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    background-color: var(--bg-void);
+    color: #f1f5f9;
+    font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Chivo', 'Instrument Sans', sans-serif;
+    letter-spacing: -0.045em;
+  }
+
+  code, kbd, .font-mono, .telemetry, .swiss-tag {
+    font-family: 'Space Mono', monospace;
+    font-feature-settings: 'tnum' on, 'zero' on;
+  }
+}
+
+/* Swiss Minimalist Grid Background */
+.swiss-grid {
+  background-image: 
+    linear-gradient(to right, rgba(168, 85, 247, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168, 85, 247, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Swiss Card Panels */
+.swiss-card {
+  background: rgba(16, 7, 28, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  position: relative;
+}
+
+.swiss-card-hover {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+  will-change: transform, box-shadow;
+}
+
+.swiss-card-hover:hover {
+  border-color: rgba(234, 179, 8, 0.5);
+  box-shadow: 0 16px 36px -10px rgba(234, 179, 8, 0.14), 0 0 0 1px rgba(234, 179, 8, 0.2);
+  transform: translateY(-3px);
+}
+
+/* Monospaced Technical Tag */
+.swiss-tag {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Viewport Scroll Reveal Utilities */
+.reveal-init {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.reveal-init.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-100 { transition-delay: 100ms; }
+.reveal-delay-200 { transition-delay: 200ms; }
+.reveal-delay-300 { transition-delay: 300ms; }
+.reveal-delay-400 { transition-delay: 400ms; }
+
+/* Fluid View & Movement Animations */
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulseRadar {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 8px rgba(234, 179, 8, 0.6)); }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+@keyframes shimmerSweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes viewEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-radar-pulse {
+  animation: pulseRadar 3s ease-in-out infinite;
+}
+
+.view-enter {
+  animation: viewEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Button & Interactive Scale Physics */
+button:active, .interactive-tap:active {
+  transform: scale(0.98);
+  transition: transform 0.05s ease;
+}
+
+/* Custom Gold/Purple Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08040d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.3);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(234, 179, 8, 0.6);
+}
+
