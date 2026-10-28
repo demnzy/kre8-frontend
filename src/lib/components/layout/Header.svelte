@@ -1,122 +1,81 @@
 <script lang="ts">
-  import { appState } from '../../stores/appState.svelte';
-  import { api } from '../../api/client';
-  import { Search, Plus, Sparkles, Database, RotateCcw, Globe, Home } from 'lucide-svelte';
+  import { appState, type AppModule } from '../../stores/appState.svelte';
+  import { getProviderConfig } from '../../utils/aiProviders';
+  import { Search, Plus, Sparkles, Key } from 'lucide-svelte';
 
-  let isResetting = $state(false);
-  let isDemoLoading = $state(false);
+  const moduleTitles: Record<AppModule, string> = {
+    dashboard: 'Dashboard',
+    content: 'My Content',
+    ideas: 'Ideas Bank',
+    scripts: 'Script Studio',
+    discover: 'Discover & News',
+    calendar: 'Calendar',
+    analytics: 'Analytics',
+    tasks: 'Tasks',
+    notes: 'Notes',
+    goals: 'Goals',
+    settings: 'Settings'
+  };
 
-  async function handleLoadDemo() {
-    try {
-      isDemoLoading = true;
-      const res = await api.loadDemoData();
-      await appState.loadInitialData();
-      appState.showToast(res.message || 'Demo data loaded successfully!', 'success');
-      const current = appState.activeModule;
-      appState.setModule(current);
-    } catch (e: any) {
-      appState.showToast(e.message || 'Failed to load demo data', 'error');
-    } finally {
-      isDemoLoading = false;
-    }
-  }
-
-  async function handleReset() {
-    if (!confirm('Are you sure you want to reset workspace to a fresh empty state?')) return;
-    try {
-      isResetting = true;
-      const res = await api.resetWorkspace();
-      appState.showToast(res.message || 'Workspace reset!', 'info');
-      const current = appState.activeModule;
-      appState.setModule(current);
-    } catch (e: any) {
-      appState.showToast(e.message || 'Failed to reset workspace', 'error');
-    } finally {
-      isResetting = false;
-    }
-  }
+  let activeTitle = $derived(moduleTitles[appState.activeModule] || 'Workspace');
+  let activeProvider = $derived(getProviderConfig(appState.preferences.ai_provider));
 </script>
 
-<header class="h-16 border-b border-purple-900/40 bg-[#0a0412]/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20">
-  <!-- Left: Clean Studio Module Breadcrumb -->
-  <div class="flex items-center gap-2">
-    <span class="text-xs font-mono uppercase tracking-wider text-slate-400">Kre8 Studio</span>
-    <span class="text-xs text-purple-600 font-mono">/</span>
-    <span class="text-xs font-mono font-bold uppercase tracking-wider text-amber-300">{appState.activeModule}</span>
+<header class="h-16 border-b border-purple-900/30 bg-[#0a0412]/85 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20">
+  <!-- Left: Clean Page Title & Niche Pill -->
+  <div class="flex items-center gap-3">
+    <h2 class="text-base font-semibold text-white tracking-tight">
+      {activeTitle}
+    </h2>
+    <span class="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs bg-purple-950/50 border border-purple-800/40 text-purple-200">
+      {appState.preferences.primary_niche}
+    </span>
   </div>
 
-  <!-- Right: Actions & Tools -->
-  <div class="flex items-center gap-3">
-    <!-- Quick Search trigger -->
+  <!-- Right: Focused Actions -->
+  <div class="flex items-center gap-2.5">
+    <!-- Quick Search -->
     <button
+      type="button"
       onclick={() => (appState.commandPaletteOpen = true)}
-      class="flex items-center gap-2 px-3 py-1.5 bg-black border border-purple-900/60 hover:border-amber-400/50 text-xs text-slate-400 hover:text-slate-200 transition-all font-mono"
+      class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-black/60 border border-purple-900/50 hover:border-purple-700 text-xs text-slate-400 hover:text-slate-200 transition-all"
     >
       <Search class="w-3.5 h-3.5" />
       <span class="hidden sm:inline">Search...</span>
-      <kbd class="hidden md:inline text-[10px] bg-purple-950/60 px-1 py-0.2 border border-purple-800 text-purple-300">⌘K</kbd>
+      <kbd class="hidden md:inline text-[10px] rounded bg-purple-950/60 px-1.5 py-0.5 border border-purple-800/60 text-purple-300">⌘K</kbd>
     </button>
 
-    <!-- Demo Data Buttons -->
-    <div class="hidden lg:flex items-center gap-1.5 border-l border-purple-900/40 pl-3">
-      <button
-        onclick={handleLoadDemo}
-        disabled={isDemoLoading}
-        class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950/40 hover:bg-purple-900/40 text-amber-300 border border-purple-800 text-xs font-mono uppercase transition-colors"
-        title="Populate sample ideas, scripts, and calendar events for testing"
-      >
-        <Database class="w-3.5 h-3.5 text-amber-400" />
-        <span>{isDemoLoading ? 'Loading...' : 'Load Demo'}</span>
-      </button>
-
-      <button
-        onclick={handleReset}
-        disabled={isResetting}
-        class="flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-purple-950/40 text-slate-400 hover:text-slate-200 border border-purple-900/40 text-xs font-mono uppercase transition-colors"
-        title="Reset workspace to fresh empty state"
-      >
-        <RotateCcw class="w-3.5 h-3.5" />
-        <span>Reset</span>
-      </button>
-    </div>
-
-    <!-- Return to landing page button -->
+    <!-- AI Provider & API Key Pill -->
     <button
-      onclick={() => appState.exitToLanding()}
-      class="hidden md:flex items-center gap-1 px-3 py-1.5 border border-purple-900/40 hover:border-purple-600 text-purple-300 text-xs font-mono uppercase transition-colors"
-      title="Return to Landing Page"
+      type="button"
+      onclick={() => {
+        if (!appState.hasConfiguredApiKey) {
+          appState.apiKeyModalOpen = true;
+        } else {
+          appState.setModule('settings');
+        }
+      }}
+      class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 border transition-all text-xs {appState.hasConfiguredApiKey
+        ? 'border-purple-900/50 hover:border-amber-400/50 text-slate-200'
+        : 'border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15'}"
+      title={appState.hasConfiguredApiKey ? 'Active AI model (Click to open AI settings)' : 'Set up your personal AI API key'}
     >
-      <Home class="w-3.5 h-3.5" />
-      <span>Landing</span>
+      {#if appState.hasConfiguredApiKey}
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+        <span class="font-medium">{activeProvider.name}</span>
+        <span class="text-slate-400 hidden lg:inline">• {appState.preferences.ai_model || activeProvider.defaultModel}</span>
+      {:else}
+        <Key class="w-3.5 h-3.5 text-amber-400" />
+        <span class="font-medium">Add API Key</span>
+      {/if}
     </button>
 
-    <!-- User Profile & Logout -->
-    {#if appState.currentUser}
-      <div class="hidden sm:flex items-center gap-2 pl-2 border-l border-purple-900/40">
-        <span class="text-[11px] font-mono text-amber-300/90 max-w-[120px] truncate" title={appState.currentUser.email}>
-          {appState.currentUser.display_name}
-        </span>
-        <button
-          onclick={() => appState.logout()}
-          class="px-2 py-1 bg-[#10071c] hover:bg-rose-950/40 border border-purple-900/50 hover:border-rose-500/40 text-[10px] font-mono uppercase text-slate-400 hover:text-rose-300 transition-colors"
-          title="Sign out of current studio session"
-        >
-          Logout
-        </button>
-      </div>
-    {:else}
-      <button
-        onclick={() => appState.openAuth('login')}
-        class="hidden sm:flex items-center gap-1 px-2.5 py-1.5 border border-amber-400/50 text-amber-300 text-xs font-mono uppercase hover:bg-amber-400/10 transition-colors"
-      >
-        Sign In
-      </button>
-    {/if}
-
-    <!-- Quick Capture (+) -->
+    <!-- Quick Capture -->
     <button
+      type="button"
       onclick={() => (appState.quickCaptureOpen = true)}
-      class="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black uppercase tracking-wider shadow-md transition-all active:scale-95 font-display"
+      class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold shadow-sm transition-all"
     >
       <Plus class="w-4 h-4" />
       <span class="hidden sm:inline">New</span>

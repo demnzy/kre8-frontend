@@ -10,7 +10,7 @@
   :root {
     --bg-void: #08040d;
     --bg-surface: #10071c;
-    --bg-card: rgba(16, 7, 28, 0.85);
+    --bg-card: rgba(18, 9, 31, 0.82);
     
     --purple-primary: #9333ea;
     --purple-vivid: #a855f7;
@@ -31,58 +31,62 @@
     font-family: 'Instrument Sans', system-ui, -apple-system, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
   }
 
   h1, h2, h3, h4, .font-display {
-    font-family: 'Chivo', 'Instrument Sans', sans-serif;
-    letter-spacing: -0.045em;
+    font-family: 'Instrument Sans', 'Chivo', sans-serif;
+    letter-spacing: -0.02em;
   }
 
-  code, kbd, .font-mono, .telemetry, .swiss-tag {
+  code, kbd, .telemetry {
     font-family: 'Space Mono', monospace;
     font-feature-settings: 'tnum' on, 'zero' on;
   }
 }
 
-/* Swiss Minimalist Grid Background */
+/* Subtle Ambient Grid Background */
 .swiss-grid {
   background-image: 
-    linear-gradient(to right, rgba(168, 85, 247, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(168, 85, 247, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(to right, rgba(168, 85, 247, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(168, 85, 247, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 
-/* Swiss Card Panels */
+/* Modern Studio Card Panels */
 .swiss-card {
-  background: rgba(16, 7, 28, 0.85);
-  border: 1px solid rgba(168, 85, 247, 0.18);
+  background: rgba(17, 9, 30, 0.82);
+  border: 1px solid rgba(168, 85, 247, 0.16);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(12px);
   position: relative;
 }
 
 .swiss-card-hover {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease, box-shadow 0.28s ease;
   will-change: transform, box-shadow;
 }
 
 .swiss-card-hover:hover {
-  border-color: rgba(234, 179, 8, 0.5);
-  box-shadow: 0 16px 36px -10px rgba(234, 179, 8, 0.14), 0 0 0 1px rgba(234, 179, 8, 0.2);
-  transform: translateY(-3px);
+  border-color: rgba(234, 179, 8, 0.45);
+  box-shadow: 0 14px 32px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(234, 179, 8, 0.15);
+  transform: translateY(-2px);
 }
 
-/* Monospaced Technical Tag */
+/* Clean Human Label Tag (replaces all-caps monospace) */
 .swiss-tag {
-  font-family: 'Space Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: 'Instrument Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
 }
 
 /* Viewport Scroll Reveal Utilities */
 .reveal-init {
   opacity: 0;
-  transform: translateY(22px);
-  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateY(18px);
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 }
 
@@ -96,7 +100,7 @@
 .reveal-delay-300 { transition-delay: 300ms; }
 .reveal-delay-400 { transition-delay: 400ms; }
 
-/* Fluid View & Movement Animations */
+/* Fluid View & Modal Animations */
 @keyframes floatSlow {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-6px); }
@@ -104,23 +108,51 @@
 
 @keyframes pulseRadar {
   0% { transform: scale(0.95); opacity: 0.7; }
-  50% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 8px rgba(234, 179, 8, 0.6)); }
+  50% { transform: scale(1.12); opacity: 1; filter: drop-shadow(0 0 8px rgba(234, 179, 8, 0.5)); }
   100% { transform: scale(0.95); opacity: 0.7; }
-}
-
-@keyframes shimmerSweep {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
 }
 
 @keyframes viewEnter {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes modalSpring {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes slideStepForward {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideStepBackward {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -133,19 +165,31 @@
 }
 
 .view-enter {
-  animation: viewEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: viewEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.modal-spring {
+  animation: modalSpring 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.step-slide-next {
+  animation: slideStepForward 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.step-slide-prev {
+  animation: slideStepBackward 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Button & Interactive Scale Physics */
 button:active, .interactive-tap:active {
-  transform: scale(0.98);
-  transition: transform 0.05s ease;
+  transform: scale(0.985);
+  transition: transform 0.08s ease;
 }
 
 /* Custom Gold/Purple Scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -153,11 +197,10 @@ button:active, .interactive-tap:active {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.3);
-  border-radius: 2px;
+  background: rgba(168, 85, 247, 0.28);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(234, 179, 8, 0.6);
+  background: rgba(234, 179, 8, 0.55);
 }
-

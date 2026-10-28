@@ -25,9 +25,19 @@
   import NotesView from './lib/components/views/NotesView.svelte';
   import GoalsView from './lib/components/views/GoalsView.svelte';
   import SettingsView from './lib/components/views/SettingsView.svelte';
+  import ConnectionBanner from './lib/components/layout/ConnectionBanner.svelte';
+  import ApiKeySetupModal from './lib/components/layout/ApiKeySetupModal.svelte';
+  import { connection } from './lib/stores/connection.svelte';
 
-  onMount(async () => {
-    await appState.loadInitialData();
+  // Bumped on reconnect so the active view remounts and refetches its data
+  let reloadKey = $state(0);
+
+  onMount(() => {
+    appState.loadInitialData();
+    return connection.onReconnect(() => {
+      appState.loadInitialData();
+      reloadKey++;
+    });
   });
 </script>
 
@@ -45,10 +55,25 @@
       <!-- Top Swiss Header -->
       <Header />
 
+      {#if !appState.hasConfiguredApiKey}
+        <div class="bg-amber-400/10 border-b border-amber-400/30 px-6 py-2 flex items-center justify-between gap-4 text-xs">
+          <span class="text-amber-200">
+            Add your personal AI API key to generate scripts, revise drafts, and synthesize news ideas.
+          </span>
+          <button
+            type="button"
+            onclick={() => (appState.apiKeyModalOpen = true)}
+            class="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs shrink-0 transition-colors"
+          >
+            Set Up API Key
+          </button>
+        </div>
+      {/if}
+
       <!-- Scrollable View Container -->
       <main class="flex-1 overflow-y-auto px-6 py-8 md:px-10 lg:px-12 swiss-grid scroll-smooth">
         <div class="max-w-7xl mx-auto">
-          {#key appState.activeModule}
+          {#key `${appState.activeModule}:${reloadKey}:${appState.refreshKey}`}
             <div class="view-enter">
               {#if appState.activeModule === 'dashboard'}
                 <DashboardView />
@@ -86,5 +111,7 @@
 {/if}
 
 <!-- Modals & Feedback Notifications -->
+<ConnectionBanner />
 <AuthModal />
+<ApiKeySetupModal />
 <ToastContainer />

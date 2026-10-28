@@ -30,10 +30,13 @@ export interface OnboardingSuggestions {
 export interface AIConnectionStatus {
   status: 'online' | 'missing_key' | 'error';
   connected: boolean;
+  provider?: string;
   model: string;
   latency_ms: number;
   message: string;
   key_preview?: string;
+  is_fallback?: boolean;
+  status_note?: string;
 }
 
 export interface AIPromptTestResult {
@@ -41,6 +44,7 @@ export interface AIPromptTestResult {
   response: string;
   latency_ms: number;
   model: string;
+  provider?: string;
 }
 
 export interface LoginPayload {
@@ -67,7 +71,14 @@ export interface UserPreferences {
   preferred_tone?: string;
   preferred_platforms: string[];
   weekly_post_goal: number;
+  ai_provider?: 'gemini' | 'openai' | 'anthropic' | 'groq' | 'openrouter' | 'deepseek';
+  ai_model?: string;
   gemini_api_key?: string;
+  openai_api_key?: string;
+  anthropic_api_key?: string;
+  groq_api_key?: string;
+  openrouter_api_key?: string;
+  deepseek_api_key?: string;
   news_api_key?: string;
   youtube_client_id?: string;
   linkedin_client_id?: string;
@@ -139,6 +150,44 @@ export interface ScriptClip {
   cta?: string;
 }
 
+export interface ScriptVersion {
+  version: number;
+  label: string;
+  full_script: string;
+  clips?: ScriptClip[];
+  timestamp: string;
+}
+
+export interface ScriptRevisionMessage {
+  id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  summary_of_changes?: string;
+  version_number?: number;
+}
+
+export interface AIReviseScriptPayload {
+  script_id?: number;
+  current_script: string;
+  current_clips?: ScriptClip[];
+  instruction: string;
+  conversation_history?: { role: string; content: string }[];
+  target_duration_seconds?: number;
+  tone?: string;
+}
+
+export interface AIReviseScriptResult {
+  revised_script: string;
+  revised_clips: ScriptClip[];
+  summary_of_changes: string;
+  assistant_message: string;
+  version_number: number;
+  used_provider: string;
+  used_model: string;
+  versions?: ScriptVersion[];
+}
+
 export interface Script {
   id: number;
   content_item_id?: number;
@@ -149,6 +198,7 @@ export interface Script {
   generated_hooks: string[];
   generated_ctas: string[];
   clips: ScriptClip[];
+  versions?: ScriptVersion[];
   created_at: string;
   updated_at: string;
 }
@@ -211,8 +261,40 @@ export interface CreatorWatchlist {
   platform: string;
   profile_url?: string;
   topic_niche?: string;
+  avatar_url?: string;
+  subscriber_count_text?: string;
+  pacing_style?: string;
+  signature_hooks?: string[];
   personal_notes?: string;
   original_angles?: string;
+}
+
+export interface CreatorInspectResult {
+  success: boolean;
+  creator_name: string;
+  handle: string;
+  platform: string;
+  profile_url: string;
+  avatar_url?: string;
+  subscriber_count_text?: string;
+  topic_niche: string;
+  personal_notes: string;
+  original_angles: string;
+  pacing_style: string;
+  signature_hooks: string[];
+  recent_titles: string[];
+  error?: string;
+}
+
+export interface RecentUploadItem {
+  video_id: string;
+  title: string;
+  published_at: string;
+  thumbnail_url?: string;
+  views: number;
+  likes: number;
+  engagement_rate?: number;
+  url: string;
 }
 
 export interface SocialAccount {
@@ -221,6 +303,10 @@ export interface SocialAccount {
   account_name: string;
   account_id?: string;
   avatar_url?: string;
+  channel_id?: string;
+  custom_url?: string;
+  total_videos_count?: number;
+  raw_details?: Record<string, any>;
   is_connected: boolean;
   last_synced_at?: string;
 }
@@ -236,16 +322,49 @@ export interface SocialConnectPayload {
   comments?: number;
   shares?: number;
   engagement_rate?: number;
+  total_videos?: number;
+  recent_videos?: RecentUploadItem[];
+  raw_data?: Record<string, any>;
+  custom_url?: string;
+  channel_id?: string;
 }
 
 export interface YouTubeLookupResult {
   success: boolean;
+  platform?: string;
   handle: string;
   channel_title: string;
+  channel_id?: string;
+  avatar_url?: string;
   subscribers_text?: string;
   followers: number;
-  avatar_url?: string;
+  total_videos?: number;
+  total_tracked_views?: number;
+  avg_views?: number;
+  avg_engagement?: number;
+  cadence_weekly?: number;
+  top_video?: RecentUploadItem;
+  recent_videos?: RecentUploadItem[];
   message?: string;
+}
+
+export interface PlatformChannelDetail {
+  is_connected: boolean;
+  platform: string;
+  account_name: string;
+  account_id?: string;
+  avatar_url?: string;
+  last_synced_at?: string;
+  followers: number;
+  views: number;
+  impressions: number;
+  engagement_rate: number;
+  total_videos: number;
+  avg_views: number;
+  cadence_weekly: number;
+  top_video?: RecentUploadItem;
+  recent_videos: RecentUploadItem[];
+  raw_data: Record<string, any>;
 }
 
 export interface AnalyticsSummary {
@@ -258,9 +377,15 @@ export interface AnalyticsSummary {
   platforms: {
     platform: string;
     account_name: string;
+    avatar_url?: string;
     followers: number;
     views: number;
+    impressions?: number;
     engagement_rate: number;
+    total_videos?: number;
+    avg_views?: number;
+    cadence_weekly?: number;
+    top_video?: RecentUploadItem;
   }[];
 }
 

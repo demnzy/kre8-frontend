@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import LoadError from '../layout/LoadError.svelte';
   import type { Note } from '../../types';
   import {
     StickyNote,
@@ -12,241 +13,452 @@
     Trash2,
     Sparkles,
     Search,
-    Save
+    Save,
+    FileCode,
+    Check,
+    X
   } from 'lucide-svelte';
+
+  const DEFAULT_FOLDERS = ['General', 'Research', 'Script Drafts', 'Competitors', 'Sponsors'];
 
   let notes = $state<Note[]>([]);
   let activeNote = $state<Note | null>(null);
   let searchQuery = $state('');
   let selectedFolder = $state('All');
   let isLoading = $state(false);
+  let loadError = $state<string | null>(null);
+
+  // Save state & auto-save timer
+  let saveState = $state<'saved' | 'dirty' | 'saving'>('saved');
+  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Tag & custom folder inputs
+  let newTagInput = $state('');
+  let isAddingCustomFolder = $state(false);
+  let customFolderInput = $state('');
 
   onMount(loadNotes);
 
+  onDestroy(() => {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  });
+
   async function loadNotes() {
+    isLoading = true;
+    loadError = null;
     try {
-      isLoading = true;
       notes = await api.getNotes();
-      if (notes.length > 0) {
-        activeNote = notes[0];
+      if (notes.length > 0 && !activeNote) {
+        activeNote = { ...notes[0], tags: [...(notes[0].tags || [])] };
+        saveState = 'saved';
       }
     } catch (e: any) {
-      console.error(e);
+      loadError = e?.message || "Couldn't load your notes.";
     } finally {
       isLoading = false;
     }
   }
 
-  let folders = $derived([
+  let availableFolders = $derived(
+    Array.from(
+      new Set([
+        ...DEFAULT_FOLDERS,
+        ...notes.map(n => n.folder || 'General'),
+        ...(activeNote?.folder ? [activeNote.folder] : [])
+      ])
+    )
+  );
+
+  let filterFolders = $derived([
     'All',
     ...Array.from(new Set(notes.map(n => n.folder || 'General')))
   ]);
 
   let filteredNotes = $derived(
     notes.filter(n => {
-      const matchFolder = selectedFolder === 'All' || n.folder === selectedFolder;
-      const matchSearch =
-        !searchQuery.trim() ||
-        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.content.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchFolder && matchSearch;
+      const matchFolder = selectedFolder === 'All' || (n.folder || 'General') === selectedFolder;
+      if (!matchFolder) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const inTitle = n.title.toLowerCase().includes(q);
+      const inContent = (n.content || '').toLowerCase().includes(q);
+      const inTags = (n.tags || []).some(t => t.toLowerCase().includes(q));
+      return inTitle || inContent || inTags;
     })
   );
 
+  function markDirtyAndScheduleSave() {
+    saveState = 'dirty';
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => {
+      handleSaveActiveNote(true);
+    }, 900);
+  }
+
+  async function selectNote(note: Note) {
+    if (activeNote && activeNote.id === note.id) return;
+    if (saveState === 'dirty' && activeNote) {
+      if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      await handleSaveActiveNote(true);
+    }
+    const fresh = notes.find(n => n.id === note.id) || note;
+    activeNote = { ...fresh, tags: [...(fresh.tags || [])] };
+    saveState = 'saved';
+  }
+
   async function handleCreateNewNote() {
+    if (saveState === 'dirty' && activeNote) {
+      if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      await handleSaveActiveNote(true);
+    }
     try {
+      const targetFolder = selectedFolder === 'All' ? 'General' : selectedFolder;
       const created = await api.createNote({
         title: 'Untitled Note',
         content: '',
-        folder: selectedFolder === 'All' ? 'General' : selectedFolder
+        folder: targetFolder,
+        tags: []
       });
       notes = [created, ...notes];
-      activeNote = created;
+      activeNote = { ...created, tags: [...(created.tags || [])] };
+      saveState = 'saved';
       appState.showToast('New note created', 'success');
     } catch (e: any) {
-      appState.showToast(e.message || 'Failed to create note', 'error');
+      appState.showToast(e.message || 'Could not create note', 'error');
     }
   }
 
-  async function handleSaveActiveNote() {
+  async function handleSaveActiveNote(silent = false) {
     if (!activeNote) return;
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
     try {
-      const updated = await api.updateNote(activeNote.id, activeNote);
+      saveState = 'saving';
+      const updated = await api.updateNote(activeNote.id, {
+        title: activeNote.title.trim() || 'Untitled Note',
+        content: activeNote.content,
+        folder: activeNote.folder || 'General',
+        tags: activeNote.tags || [],
+        is_pinned: activeNote.is_pinned
+      });
       notes = notes.map(n => (n.id === updated.id ? updated : n));
-      activeNote = updated;
-      appState.showToast('Note saved!', 'success');
+      activeNote = { ...updated, tags: [...(updated.tags || [])] };
+      saveState = 'saved';
+      if (!silent) {
+        appState.showToast('Note saved', 'success');
+      }
     } catch (e: any) {
-      appState.showToast(e.message || 'Save failed', 'error');
+      saveState = 'dirty';
+      if (!silent) {
+        appState.showToast(e.message || 'Save failed', 'error');
+      }
     }
   }
 
-  async function togglePin(note: Note) {
+  async function togglePin(note: Note, e?: Event) {
+    if (e) e.stopPropagation();
     try {
       const updated = await api.updateNote(note.id, { is_pinned: !note.is_pinned });
-      notes = notes.map(n => (n.id === note.id ? updated : n));
-      if (activeNote?.id === note.id) activeNote = updated;
-    } catch (e: any) {
-      console.error(e);
+      notes = notes
+        .map(n => (n.id === note.id ? updated : n))
+        .sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned));
+      if (activeNote?.id === note.id) {
+        activeNote = { ...activeNote, is_pinned: updated.is_pinned };
+      }
+    } catch (err: any) {
+      appState.showToast(err.message || 'Could not pin note', 'error');
     }
   }
 
-  async function handleDeleteNote(id: number) {
+  async function handleDeleteNote(id: number, e?: Event) {
+    if (e) e.stopPropagation();
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
     try {
       await api.deleteNote(id);
       notes = notes.filter(n => n.id !== id);
-      activeNote = notes.length > 0 ? notes[0] : null;
+      if (activeNote?.id === id) {
+        activeNote = notes.length > 0 ? { ...notes[0], tags: [...(notes[0].tags || [])] } : null;
+        saveState = 'saved';
+      }
       appState.showToast('Note deleted', 'info');
-    } catch (e: any) {
-      appState.showToast(e.message || 'Delete failed', 'error');
+    } catch (err: any) {
+      appState.showToast(err.message || 'Delete failed', 'error');
     }
   }
 
-  async function handleTurnNoteIntoIdeas() {
-    if (!activeNote?.content) return;
+  function addTagToActiveNote() {
+    if (!activeNote) return;
+    const val = newTagInput.trim().replace(/^#/, '');
+    if (!val) return;
+    const currentTags = activeNote.tags || [];
+    if (!currentTags.includes(val)) {
+      activeNote.tags = [...currentTags, val];
+      markDirtyAndScheduleSave();
+    }
+    newTagInput = '';
+  }
+
+  function removeTagFromActiveNote(tag: string) {
+    if (!activeNote) return;
+    activeNote.tags = (activeNote.tags || []).filter(t => t !== tag);
+    markDirtyAndScheduleSave();
+  }
+
+  function applyCustomFolder() {
+    if (!activeNote) return;
+    const val = customFolderInput.trim();
+    if (val) {
+      activeNote.folder = val;
+      markDirtyAndScheduleSave();
+    }
+    customFolderInput = '';
+    isAddingCustomFolder = false;
+  }
+
+  async function handleTurnNoteIntoIdea() {
+    if (!activeNote) return;
+    await handleSaveActiveNote(true);
     try {
       const created = await api.createIdea({
-        title: activeNote.title,
-        description: activeNote.content.slice(0, 300),
-        category: activeNote.folder || 'Notes',
+        title: activeNote.title.trim() || 'Idea from Note',
+        description: (activeNote.content || '').slice(0, 400),
+        category: activeNote.folder || 'General',
+        tags: activeNote.tags || [],
         status: 'Active'
       });
-      appState.showToast(`Converted note into Idea: "${created.title}"!`, 'success');
+      appState.showToast(`Saved to Ideas Bank: "${created.title}"`, 'success');
     } catch (e: any) {
-      appState.showToast(e.message || 'Conversion failed', 'error');
+      appState.showToast(e.message || 'Could not create idea', 'error');
     }
+  }
+
+  async function handleSendToScriptStudio() {
+    if (!activeNote) return;
+    await handleSaveActiveNote(true);
+    const lines = (activeNote.content || '')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+    appState.openScriptStudioWithTopic({
+      topic: activeNote.title.trim() || 'Untitled Script',
+      talking_points: lines.slice(0, 6),
+      autoGenerate: false
+    });
+  }
+
+  function formatUpdatedTime(iso?: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 </script>
 
 <div class="space-y-6 animate-in fade-in duration-300">
-  <!-- Swiss Header -->
-  <div class="p-6 bg-[#10071c] border border-purple-900/30 relative">
+  {#if loadError}
+    <LoadError message={loadError} onRetry={loadNotes} />
+  {/if}
+
+  <!-- Header -->
+  <div class="swiss-card p-6 border border-purple-900/40 bg-[#10071c]">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <div class="flex items-center gap-2 mb-1.5">
-          <span class="font-mono text-[10px] tracking-widest text-amber-400 uppercase">Research Archive</span>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-xs font-medium text-amber-400">Research & Drafts</span>
+          <span class="text-xs text-slate-400">• {notes.length} {notes.length === 1 ? 'note' : 'notes'}</span>
         </div>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display flex items-center gap-2.5">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
           <StickyNote class="w-6 h-6 text-amber-400" />
-          <span>Creator Notes & Research Archive</span>
+          <span>Creator Notes</span>
         </h1>
         <p class="text-xs text-slate-400 mt-1 max-w-xl">
-          Capture competitor formulas, study references, and promote raw thoughts into structured scripts.
+          Jot down research, hook ideas, and rough outlines—then promote them to your Ideas Bank or Script Studio.
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
-        <button
-          onclick={handleCreateNewNote}
-          class="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold font-mono tracking-wider uppercase transition-all shadow-md shadow-amber-500/10"
-        >
-          <Plus class="w-4 h-4" />
-          <span>New Note</span>
-        </button>
-      </div>
+      <button
+        type="button"
+        onclick={handleCreateNewNote}
+        class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all shadow-sm shrink-0"
+      >
+        <Plus class="w-4 h-4" />
+        <span>New Note</span>
+      </button>
     </div>
   </div>
 
   <!-- Two Pane Layout -->
   <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[650px]">
     <!-- Left Pane: Notes List (4 cols) -->
-    <div class="lg:col-span-4 bg-[#10071c] border border-purple-900/30 p-4 space-y-4 flex flex-col justify-between">
-      <div class="space-y-3">
-        <!-- Search & Folder filter -->
-        <div class="relative">
-          <Search class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-purple-400/60" />
-          <input
-            type="text"
-            bind:value={searchQuery}
-            placeholder="Search notes archive..."
-            class="w-full pl-9 pr-3.5 py-1.5 bg-[#08040d] border border-purple-900/40 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-          />
-        </div>
+    <div class="lg:col-span-4 swiss-card border border-purple-900/40 bg-[#10071c] p-4 space-y-4 flex flex-col">
+      <!-- Search -->
+      <div class="relative">
+        <Search class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search notes or tags..."
+          class="w-full pl-9 pr-3.5 py-2 rounded-lg bg-[#08040d] border border-purple-900/40 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+        />
+      </div>
 
-        <!-- Folder Tabs -->
-        <div class="flex gap-1.5 overflow-x-auto pb-1 font-mono text-[10px] uppercase tracking-wider">
-          {#each folders as folder}
-            <button
-              onclick={() => (selectedFolder = folder)}
-              class="px-2.5 py-1 border transition-all shrink-0 {selectedFolder === folder
-                ? 'bg-amber-400 text-black border-amber-400 font-bold'
-                : 'bg-[#08040d] text-slate-400 border-purple-900/30 hover:text-white'}"
-            >
-              {folder}
-            </button>
-          {/each}
-        </div>
+      <!-- Folder Filter Tabs -->
+      <div class="flex gap-1.5 overflow-x-auto pb-1">
+        {#each filterFolders as folder}
+          <button
+            type="button"
+            onclick={() => (selectedFolder = folder)}
+            class="px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 {selectedFolder === folder
+              ? 'bg-amber-400 text-black font-semibold'
+              : 'bg-[#08040d] text-slate-400 border border-purple-900/30 hover:text-white'}"
+          >
+            {folder}
+          </button>
+        {/each}
+      </div>
 
-        <!-- Notes Items -->
-        <div class="space-y-2 overflow-y-auto max-h-[520px] pr-1">
+      <!-- Notes Items -->
+      {#if filteredNotes.length === 0}
+        <div class="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-2 text-slate-400 text-xs">
+          <StickyNote class="w-7 h-7 text-purple-400/40" />
+          <p>{notes.length === 0 ? 'No notes yet.' : 'No notes match your search.'}</p>
+        </div>
+      {:else}
+        <div class="space-y-2 overflow-y-auto max-h-[540px] pr-1 flex-1">
           {#each filteredNotes as note}
             {@const isSelected = activeNote?.id === note.id}
-            <button
-              onclick={() => (activeNote = note)}
-              class="w-full p-3 border text-left transition-all flex flex-col gap-1.5 {isSelected
-                ? 'bg-purple-950/40 border-amber-400/70 shadow-md shadow-amber-500/5'
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              onclick={() => selectNote(note)}
+              class="w-full p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 group {isSelected
+                ? 'bg-purple-950/50 border-amber-400/70 shadow-sm'
                 : 'bg-[#08040d]/80 border-purple-900/25 hover:border-purple-700/50'}"
             >
-              <div class="flex items-center justify-between font-mono text-[10px]">
-                <span class="text-amber-400 uppercase tracking-widest truncate">{note.folder}</span>
-                <div class="flex items-center gap-1">
-                  {#if note.is_pinned}
-                    <Pin class="w-3 h-3 text-amber-400 fill-amber-400" />
-                  {/if}
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="text-amber-400 font-medium truncate">{note.folder || 'General'}</span>
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onclick={(e) => togglePin(note, e)}
+                    class="p-0.5 rounded hover:text-amber-400 transition-colors {note.is_pinned ? 'text-amber-400' : 'text-slate-500 opacity-0 group-hover:opacity-100'}"
+                    title={note.is_pinned ? 'Unpin note' : 'Pin note'}
+                  >
+                    <Pin class="w-3 h-3 {note.is_pinned ? 'fill-amber-400' : ''}" />
+                  </button>
+                  <button
+                    type="button"
+                    onclick={(e) => handleDeleteNote(note.id, e)}
+                    class="p-0.5 rounded text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete note"
+                  >
+                    <Trash2 class="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
-              <h4 class="text-xs font-bold font-display text-white line-clamp-1">{note.title}</h4>
-              <p class="text-[11px] text-slate-400 line-clamp-2 leading-relaxed font-sans">
+              <h4 class="text-xs font-semibold text-white line-clamp-1">{note.title}</h4>
+              <p class="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
                 {note.content || 'Empty note...'}
               </p>
-            </button>
+
+              {#if note.tags && note.tags.length > 0}
+                <div class="flex flex-wrap gap-1 pt-0.5">
+                  {#each note.tags.slice(0, 3) as tag}
+                    <span class="px-1.5 py-0.2 rounded text-[10px] bg-purple-950/60 text-purple-300 border border-purple-800/40">
+                      #{tag}
+                    </span>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           {/each}
         </div>
-      </div>
+      {/if}
     </div>
 
     <!-- Right Pane: Active Note Editor (8 cols) -->
-    <div class="lg:col-span-8 bg-[#10071c] border border-purple-900/30 p-6 space-y-4 flex flex-col justify-between">
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      role="region"
+      aria-label="Note Editor"
+      onkeydown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          handleSaveActiveNote(false);
+        }
+      }}
+      class="lg:col-span-8 swiss-card border border-purple-900/40 bg-[#10071c] p-6 space-y-4 flex flex-col justify-between"
+    >
       {#if activeNote}
         <div class="space-y-4 flex-1 flex flex-col">
-          <!-- Editor Header -->
-          <div class="flex items-center justify-between gap-3 pb-3 border-b border-purple-900/30">
+          <!-- Title & Top Actions -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-900/30">
             <input
               type="text"
               bind:value={activeNote.title}
-              class="text-xl font-bold font-display text-white bg-transparent border-none focus:outline-none w-full tracking-tight"
-              placeholder="Note Title..."
+              oninput={markDirtyAndScheduleSave}
+              class="text-xl font-bold text-white bg-transparent border-none focus:outline-none w-full tracking-tight"
+              placeholder="Note title..."
             />
 
-            <div class="flex items-center gap-2 shrink-0 font-mono text-xs">
+            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+              <!-- Auto-save status indicator -->
+              <span class="text-[11px] text-slate-400 flex items-center gap-1 mr-1">
+                {#if saveState === 'saving'}
+                  <span class="text-amber-300">Saving...</span>
+                {:else if saveState === 'dirty'}
+                  <span class="text-amber-300">Unsaved</span>
+                {:else}
+                  <Check class="w-3 h-3 text-emerald-400" />
+                  <span class="text-slate-400">Saved</span>
+                {/if}
+              </span>
+
               <button
+                type="button"
                 onclick={() => activeNote && togglePin(activeNote)}
-                class="p-2 bg-[#08040d] border border-purple-900/40 hover:text-amber-400 text-slate-400 transition-colors"
-                title="Pin note"
+                class="p-2 rounded-lg bg-[#08040d] border border-purple-900/40 hover:text-amber-400 text-slate-400 transition-colors"
+                title={activeNote.is_pinned ? 'Unpin note' : 'Pin note'}
               >
-                <Pin class="w-4 h-4 {activeNote.is_pinned ? 'text-amber-400 fill-amber-400' : ''}" />
+                <Pin class="w-3.5 h-3.5 {activeNote.is_pinned ? 'text-amber-400 fill-amber-400' : ''}" />
               </button>
 
               <button
-                onclick={handleTurnNoteIntoIdeas}
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950/50 text-purple-300 border border-purple-700/40 text-[11px] font-semibold hover:border-amber-400/50 transition-all uppercase tracking-wider"
-                title="Convert note into Ideas Bank entry"
+                type="button"
+                onclick={handleTurnNoteIntoIdea}
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/60 text-purple-200 border border-purple-700/40 text-xs font-medium hover:border-amber-400/50 transition-all"
+                title="Save this note to your Ideas Bank"
               >
-                <Sparkles class="w-3 h-3 text-amber-400" />
-                <span>Turn to Idea</span>
+                <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+                <span>Save as Idea</span>
               </button>
 
               <button
-                onclick={handleSaveActiveNote}
-                class="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-[11px] font-bold uppercase tracking-wider transition-all shadow-sm"
+                type="button"
+                onclick={handleSendToScriptStudio}
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/60 text-purple-200 border border-purple-700/40 text-xs font-medium hover:border-amber-400/50 transition-all"
+                title="Send this note to Script Studio"
               >
-                <Save class="w-3 h-3" />
+                <FileCode class="w-3.5 h-3.5 text-amber-400" />
+                <span>Open in Script Studio</span>
+              </button>
+
+              <button
+                type="button"
+                onclick={() => handleSaveActiveNote(false)}
+                class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all shadow-sm"
+              >
+                <Save class="w-3.5 h-3.5" />
                 <span>Save</span>
               </button>
 
               <button
+                type="button"
                 onclick={() => activeNote && handleDeleteNote(activeNote.id)}
-                class="p-2 text-slate-600 hover:text-rose-400 transition-colors"
+                class="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
                 title="Delete note"
               >
                 <Trash2 class="w-4 h-4" />
@@ -254,19 +466,122 @@
             </div>
           </div>
 
+          <!-- Folder & Tags Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <!-- Folder Picker -->
+            <div class="flex items-center gap-2">
+              <Folder class="w-3.5 h-3.5 text-amber-400" />
+              <span class="text-slate-400">Folder:</span>
+              {#if isAddingCustomFolder}
+                <div class="flex items-center gap-1">
+                  <input
+                    type="text"
+                    bind:value={customFolderInput}
+                    placeholder="Folder name..."
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        applyCustomFolder();
+                      }
+                    }}
+                    class="px-2.5 py-1 rounded-md bg-[#08040d] border border-amber-400 text-white text-xs w-32 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onclick={applyCustomFolder}
+                    class="px-2 py-1 rounded-md bg-amber-400 text-black text-xs font-medium"
+                  >
+                    Set
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => (isAddingCustomFolder = false)}
+                    class="p-1 text-slate-400 hover:text-white"
+                  >
+                    <X class="w-3 h-3" />
+                  </button>
+                </div>
+              {:else}
+                <select
+                  bind:value={activeNote.folder}
+                  onchange={markDirtyAndScheduleSave}
+                  class="px-2.5 py-1 rounded-lg bg-[#08040d] border border-purple-900/50 text-slate-200 text-xs focus:outline-none focus:border-amber-400"
+                >
+                  {#each availableFolders as f}
+                    <option value={f}>{f}</option>
+                  {/each}
+                </select>
+                <button
+                  type="button"
+                  onclick={() => (isAddingCustomFolder = true)}
+                  class="text-[11px] text-amber-400 hover:underline"
+                >
+                  + New folder
+                </button>
+              {/if}
+            </div>
+
+            <!-- Tags Editor -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <Tag class="w-3.5 h-3.5 text-purple-400" />
+              {#each activeNote.tags || [] as tag}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-purple-950/60 text-purple-200 border border-purple-800/40">
+                  <span>#{tag}</span>
+                  <button
+                    type="button"
+                    onclick={() => removeTagFromActiveNote(tag)}
+                    class="text-slate-400 hover:text-rose-400"
+                    aria-label="Remove tag"
+                  >
+                    <X class="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              {/each}
+              <input
+                type="text"
+                bind:value={newTagInput}
+                placeholder="+ Add tag..."
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTagToActiveNote();
+                  }
+                }}
+                class="px-2 py-0.5 rounded-md bg-[#08040d] border border-purple-900/40 text-xs text-slate-200 placeholder-slate-500 w-24 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+          </div>
+
           <!-- Note Content Area -->
           <div class="flex-1 flex flex-col">
             <textarea
               bind:value={activeNote.content}
-              rows={17}
-              placeholder="Record deep observations, viral hook structures, or raw creative transcriptions..."
-              class="w-full flex-1 p-4 bg-[#08040d] border border-purple-900/30 text-slate-100 text-sm leading-relaxed focus:outline-none focus:border-amber-400 font-sans"
+              oninput={markDirtyAndScheduleSave}
+              rows={16}
+              placeholder="Write your research notes, video outlines, or talking points here..."
+              class="w-full flex-1 p-4 rounded-xl bg-[#08040d] border border-purple-900/30 text-slate-100 text-sm leading-relaxed focus:outline-none focus:border-amber-400"
             ></textarea>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+            <span>{(activeNote.content || '').split(/\s+/).filter(Boolean).length} words</span>
+            {#if activeNote.updated_at}
+              <span>Last updated {formatUpdatedTime(activeNote.updated_at)}</span>
+            {/if}
           </div>
         </div>
       {:else}
-        <div class="flex items-center justify-center h-full text-slate-500 font-mono text-xs uppercase tracking-wider">
-          Select or initialize a note to edit.
+        <div class="flex flex-col items-center justify-center h-full text-slate-400 text-xs space-y-3 py-16">
+          <StickyNote class="w-8 h-8 text-purple-400/40" />
+          <p>Select a note from the list or create a new one to start writing.</p>
+          <button
+            type="button"
+            onclick={handleCreateNewNote}
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all"
+          >
+            <Plus class="w-3.5 h-3.5" />
+            <span>Create First Note</span>
+          </button>
         </div>
       {/if}
     </div>

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import LoadError from '../layout/LoadError.svelte';
   import type { ContentIdea } from '../../types';
   import {
     Lightbulb,
@@ -11,7 +12,9 @@
     FileCode,
     Sparkles,
     Trash2,
-    Search
+    Search,
+    Pencil,
+    X
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
 
@@ -21,24 +24,51 @@
   let onlyFavorites = $state(false);
   let isLoading = $state(false);
 
-  let showCreateModal = $state(false);
-  let newTitle = $state('');
-  let newDescription = $state('');
-  let newPlatform = $state('YouTube');
-  let newPriority = $state<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
-  let newTags = $state('ai, tutorial');
+  let showModal = $state(false);
+  let editingIdea = $state<ContentIdea | null>(null);
+  let formTitle = $state('');
+  let formDescription = $state('');
+  let formNotes = $state('');
+  let formPlatform = $state('YouTube');
+  let formPriority = $state<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
+  let formTags = $state('ai, tutorial');
+  let loadError = $state<string | null>(null);
 
   onMount(loadIdeas);
 
   async function loadIdeas() {
+    isLoading = true;
+    loadError = null;
     try {
-      isLoading = true;
       ideas = await api.getIdeas();
+      appState.counts.ideas = ideas.length;
     } catch (e: any) {
-      appState.showToast(e.message || 'Failed to load ideas', 'error');
+      loadError = e?.message || "Couldn't load your ideas.";
     } finally {
       isLoading = false;
     }
+  }
+
+  function openCreateModal() {
+    editingIdea = null;
+    formTitle = '';
+    formDescription = '';
+    formNotes = '';
+    formPlatform = 'YouTube';
+    formPriority = 'Medium';
+    formTags = 'ai, tutorial';
+    showModal = true;
+  }
+
+  function openEditModal(idea: ContentIdea) {
+    editingIdea = idea;
+    formTitle = idea.title;
+    formDescription = idea.description || '';
+    formNotes = idea.notes || '';
+    formPlatform = idea.intended_platform || 'YouTube';
+    formPriority = idea.priority || 'Medium';
+    formTags = (idea.tags || []).join(', ');
+    showModal = true;
   }
 
   let filteredIdeas = $derived(
@@ -76,31 +106,45 @@
     try {
       await api.deleteIdea(id);
       ideas = ideas.filter(i => i.id !== id);
+      appState.counts.ideas = ideas.length;
       appState.showToast('Idea removed', 'info');
     } catch (e: any) {
       appState.showToast(e.message || 'Delete failed', 'error');
     }
   }
 
-  async function handleCreateIdea(e: Event) {
+  async function handleSaveIdea(e: Event) {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!formTitle.trim()) return;
+    const tagsArray = formTags.split(',').map(t => t.trim()).filter(Boolean);
     try {
-      const tagsArray = newTags.split(',').map(t => t.trim()).filter(Boolean);
-      const created = await api.createIdea({
-        title: newTitle,
-        description: newDescription,
-        intended_platform: newPlatform,
-        priority: newPriority,
-        category: appState.preferences.primary_niche,
-        tags: tagsArray,
-        status: 'Active'
-      });
-      ideas = [created, ...ideas];
-      newTitle = '';
-      newDescription = '';
-      showCreateModal = false;
-      appState.showToast(`Saved idea: "${created.title}"`, 'success');
+      if (editingIdea) {
+        const updated = await api.updateIdea(editingIdea.id, {
+          title: formTitle.trim(),
+          description: formDescription.trim(),
+          notes: formNotes.trim() || undefined,
+          intended_platform: formPlatform,
+          priority: formPriority,
+          tags: tagsArray
+        });
+        ideas = ideas.map(i => (i.id === updated.id ? updated : i));
+        appState.showToast(`Updated idea: "${updated.title}"`, 'success');
+      } else {
+        const created = await api.createIdea({
+          title: formTitle.trim(),
+          description: formDescription.trim(),
+          notes: formNotes.trim() || undefined,
+          intended_platform: formPlatform,
+          priority: formPriority,
+          category: appState.preferences.primary_niche,
+          tags: tagsArray,
+          status: 'Active'
+        });
+        ideas = [created, ...ideas];
+        appState.counts.ideas = ideas.length;
+        appState.showToast(`Saved idea: "${created.title}"`, 'success');
+      }
+      showModal = false;
     } catch (e: any) {
       appState.showToast(e.message || 'Failed to save', 'error');
     }
@@ -108,6 +152,9 @@
 </script>
 
 <div class="space-y-6 animate-in fade-in duration-300">
+  {#if loadError}
+    <LoadError message={loadError} onRetry={loadIdeas} />
+  {/if}
   <!-- Swiss Header -->
   <div class="swiss-card p-6 border border-purple-900/60 bg-[#10071c] space-y-4">
     <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
@@ -124,7 +171,7 @@
 
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white font-display">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
           Ideas Bank
         </h1>
         <p class="text-xs text-slate-300 mt-1">
@@ -135,15 +182,15 @@
       <div class="flex items-center gap-3">
         <button
           onclick={() => appState.setModule('discover')}
-          class="flex items-center gap-2 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/50 text-amber-300 border border-purple-700/60 text-xs font-mono uppercase"
+          class="flex items-center gap-2 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/50 text-amber-300 border border-purple-700/60 text-xs font-mono"
         >
           <Sparkles class="w-3.5 h-3.5 text-amber-400" />
           <span>Suggest from News</span>
         </button>
 
         <button
-          onclick={() => (showCreateModal = true)}
-          class="flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-black uppercase font-display tracking-wider"
+          onclick={openCreateModal}
+          class="flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider"
         >
           <Plus class="w-4 h-4" />
           <span>Add Idea</span>
@@ -158,7 +205,7 @@
       {#each ['All', 'YouTube', 'TikTok', 'LinkedIn', 'Instagram', 'X'] as plat}
         <button
           onclick={() => (filterPlatform = plat)}
-          class="px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all shrink-0 {filterPlatform === plat
+          class="px-3 py-1.5 text-xs font-mono tracking-wider transition-all shrink-0 {filterPlatform === plat
             ? 'bg-amber-400 text-black font-bold'
             : 'text-slate-400 hover:text-white bg-purple-950/30 border border-purple-900/50'}"
         >
@@ -168,7 +215,7 @@
 
       <button
         onclick={() => (onlyFavorites = !onlyFavorites)}
-        class="px-3 py-1.5 text-xs font-mono uppercase tracking-wider transition-all shrink-0 flex items-center gap-1.5 {onlyFavorites
+        class="px-3 py-1.5 text-xs font-mono tracking-wider transition-all shrink-0 flex items-center gap-1.5 {onlyFavorites
           ? 'bg-amber-400 text-black font-bold'
           : 'text-slate-400 hover:text-white bg-purple-950/30 border border-purple-900/50'}"
       >
@@ -239,7 +286,7 @@
             {#if idea.status !== 'Converted'}
               <button
                 onclick={() => handleConvertToContent(idea.id)}
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono uppercase transition-all"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono transition-all"
                 title="Convert to Content record in Kanban"
               >
                 <Video class="w-3.5 h-3.5" />
@@ -251,42 +298,66 @@
 
             <button
               onclick={() => {
+                const combinedNotes = [idea.description, idea.notes].filter(Boolean).join('\n\n');
                 appState.openScriptStudioWithTopic({
                   topic: idea.title,
                   format: 'Short Video',
+                  custom_instructions: combinedNotes || undefined,
                   autoGenerate: true
                 });
               }}
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-purple-950 text-slate-300 border border-purple-800 text-xs font-mono uppercase transition-all"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-purple-950 text-slate-300 border border-purple-800 text-xs font-mono transition-all"
             >
               <FileCode class="w-3.5 h-3.5 text-purple-400" />
               <span>Draft Script</span>
             </button>
 
-            <button
-              onclick={() => handleDelete(idea.id)}
-              class="p-1 text-slate-600 hover:text-rose-400 transition-colors ml-auto"
-            >
-              <Trash2 class="w-3.5 h-3.5" />
-            </button>
+            <div class="flex items-center gap-1 ml-auto">
+              <button
+                onclick={() => openEditModal(idea)}
+                class="p-1 text-slate-400 hover:text-white transition-colors"
+                title="Edit idea"
+              >
+                <Pencil class="w-3.5 h-3.5" />
+              </button>
+              <button
+                onclick={() => handleDelete(idea.id)}
+                class="p-1 text-slate-600 hover:text-rose-400 transition-colors"
+                title="Delete idea"
+              >
+                <Trash2 class="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       {/each}
     </div>
   {/if}
 
-  <!-- Add Idea Modal -->
-  {#if showCreateModal}
+  <!-- Add / Edit Idea Modal -->
+  {#if showModal}
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div class="relative w-full max-w-md swiss-card border border-purple-800 bg-[#10071c] p-6 space-y-4">
-        <h3 class="text-base font-bold text-white uppercase font-display">Save Idea to Bank</h3>
-        <form onsubmit={handleCreateIdea} class="space-y-3.5">
+      <div class="relative w-full max-w-lg swiss-card border border-purple-800 bg-[#10071c] p-6 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
+          <h3 class="text-base font-bold text-white font-display">
+            {editingIdea ? 'Edit Idea' : 'Save Idea to Bank'}
+          </h3>
+          <button
+            type="button"
+            onclick={() => (showModal = false)}
+            class="text-slate-400 hover:text-white p-1"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onsubmit={handleSaveIdea} class="space-y-3.5">
           <div>
             <label for="new-idea-title-modal" class="block swiss-tag text-slate-400 mb-1">Title</label>
             <input
               id="new-idea-title-modal"
               type="text"
-              bind:value={newTitle}
+              bind:value={formTitle}
               placeholder="e.g. 3 Coding habits that 10x your output"
               required
               class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400"
@@ -297,19 +368,30 @@
             <label for="new-idea-desc-modal" class="block swiss-tag text-slate-400 mb-1">Angle / Description</label>
             <textarea
               id="new-idea-desc-modal"
-              bind:value={newDescription}
-              rows={3}
+              bind:value={formDescription}
+              rows={2}
               placeholder="Why this angle will resonate..."
               class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400"
             ></textarea>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="new-idea-notes-modal" class="block swiss-tag text-slate-400 mb-1">Hooks & Talking Points (passed to Script Studio)</label>
+            <textarea
+              id="new-idea-notes-modal"
+              bind:value={formNotes}
+              rows={3}
+              placeholder="Opening hooks, stats, or bullet points to include when generating the script..."
+              class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400"
+            ></textarea>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3">
             <div>
               <label for="new-idea-plat-modal" class="block swiss-tag text-slate-400 mb-1">Platform</label>
               <select
                 id="new-idea-plat-modal"
-                bind:value={newPlatform}
+                bind:value={formPlatform}
                 class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
               >
                 <option value="YouTube">YouTube</option>
@@ -321,11 +403,25 @@
             </div>
 
             <div>
-              <label for="new-idea-tags-modal" class="block swiss-tag text-slate-400 mb-1">Tags (comma separated)</label>
+              <label for="new-idea-prio-modal" class="block swiss-tag text-slate-400 mb-1">Priority</label>
+              <select
+                id="new-idea-prio-modal"
+                bind:value={formPriority}
+                class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="new-idea-tags-modal" class="block swiss-tag text-slate-400 mb-1">Tags</label>
               <input
                 id="new-idea-tags-modal"
                 type="text"
-                bind:value={newTags}
+                bind:value={formTags}
                 placeholder="tech, tips, ai"
                 class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
               />
@@ -335,16 +431,16 @@
           <div class="flex justify-end gap-2 pt-3 border-t border-purple-900/40">
             <button
               type="button"
-              onclick={() => (showCreateModal = false)}
+              onclick={() => (showModal = false)}
               class="px-4 py-2 text-xs text-slate-400 hover:text-white font-mono"
             >
               Cancel
             </button>
             <button
               type="submit"
-              class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold uppercase font-display"
+              class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display"
             >
-              Save Idea
+              {editingIdea ? 'Save Changes' : 'Save Idea'}
             </button>
           </div>
         </form>
