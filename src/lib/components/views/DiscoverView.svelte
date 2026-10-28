@@ -61,6 +61,7 @@
 
   let showAddWatchlist = $state(false);
   let editingWatchlistId = $state<number | null>(null);
+  let watchlistStep = $state<1 | 2 | 3>(1);
   let scannerInput = $state('');
   let isScanningCreator = $state(false);
   let scanError = $state<string | null>(null);
@@ -152,6 +153,7 @@
 
   function openAddWatchlistModal() {
     editingWatchlistId = null;
+    watchlistStep = 1;
     scannerInput = '';
     scanError = null;
     newCreatorName = '';
@@ -172,6 +174,7 @@
 
   function openEditWatchlistModal(creator: CreatorWatchlist) {
     editingWatchlistId = creator.id;
+    watchlistStep = 2;
     scannerInput = creator.profile_url || creator.handle;
     scanError = null;
     newCreatorName = creator.creator_name;
@@ -193,7 +196,7 @@
   async function handleScanCreator() {
     const input = scannerInput.trim();
     if (!input) {
-      scanError = 'Please enter a profile URL or @handle';
+      scanError = 'Please enter a profile link or handle';
       return;
     }
     scanError = null;
@@ -214,7 +217,8 @@
         newCreatorAngles = res.original_angles || '';
         newCreatorHooks = res.signature_hooks && res.signature_hooks.length > 0 ? res.signature_hooks : newCreatorHooks;
         inspectedRecentTitles = res.recent_titles || [];
-        appState.showToast(`Analyzed ${res.creator_name} with ${activeProvider.name}!`, 'success');
+        appState.showToast(`Found ${res.creator_name}!`, 'success');
+        watchlistStep = 2;
       }
     } catch (e: any) {
       scanError = e.message || 'Inspection failed. Please fill details manually.';
@@ -635,234 +639,335 @@
 
       {#if showAddWatchlist}
         <div class="p-6 swiss-card border border-purple-700 bg-[#120822] space-y-5 animate-in fade-in duration-200">
+          <!-- Step Header & Step Indicator -->
           <div class="flex items-center justify-between border-b border-purple-900/60 pb-3">
             <div>
               <h3 class="font-bold text-base text-white font-display">
                 {editingWatchlistId ? 'Edit Creator Profile' : 'Add Creator to Watchlist'}
               </h3>
               <p class="text-xs text-slate-400 mt-0.5">
-                Paste a channel link or handle to auto-populate style, pacing, and hook formulas in real-time.
+                {#if watchlistStep === 1}
+                  Enter a channel URL or handle and choose a platform to auto-populate profile telemetry.
+                {:else if watchlistStep === 2}
+                  Review auto-populated creator profile information, niche, and pacing style.
+                {:else}
+                  Review signature hook formulas and customized emulation angles for your niche.
+                {/if}
               </p>
             </div>
-            <button
-              onclick={() => (showAddWatchlist = false)}
-              class="text-xs font-mono text-slate-400 hover:text-white"
-            >
-              Close
-            </button>
-          </div>
 
-          <!-- Live Scanner Bar -->
-          <div class="p-4 bg-black/60 border border-purple-900/80 space-y-3">
-            <label class="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
-              Live Channel Scanner
-            </label>
-            <div class="flex flex-col sm:flex-row gap-2.5">
-              <div class="relative flex-1">
-                <input
-                  type="text"
-                  bind:value={scannerInput}
-                  placeholder="Paste URL or handle (e.g. @fireship, @mkbhd, or youtube.com/@veritasium)"
-                  class="w-full px-3.5 py-2.5 bg-black border border-purple-900 text-white text-xs font-mono placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                  onkeydown={(e) => e.key === 'Enter' && handleScanCreator()}
-                />
-              </div>
-              <select
-                bind:value={newCreatorPlatform}
-                class="px-3 py-2.5 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400 shrink-0"
-              >
-                <option value="YouTube">YouTube</option>
-                <option value="TikTok">TikTok</option>
-                <option value="LinkedIn">LinkedIn</option>
-                <option value="Instagram">Instagram</option>
-                <option value="X">X (Twitter)</option>
-              </select>
-              <button
-                type="button"
-                onclick={handleScanCreator}
-                disabled={isScanningCreator}
-                class="px-4 py-2.5 bg-purple-900/70 hover:bg-purple-800 text-amber-300 border border-purple-700 hover:border-amber-400 text-xs font-bold font-mono tracking-wider transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
-              >
-                {#if isScanningCreator}
-                  <RefreshCw class="w-4 h-4 animate-spin text-amber-400" />
-                  <span>Inspecting...</span>
-                {:else}
-                  <Search class="w-4 h-4 text-amber-400" />
-                  <span>Inspect Channel</span>
-                {/if}
-              </button>
-            </div>
-            {#if scanError}
-              <p class="text-xs text-rose-400 font-mono">{scanError}</p>
-            {/if}
-            {#if inspectedRecentTitles.length > 0}
-              <div class="pt-2 border-t border-purple-900/40 flex items-center justify-between text-[11px] font-mono text-slate-400">
-                <span class="text-emerald-400">✓ Scraped {inspectedRecentTitles.length} recent videos via live public RSS</span>
-                <span class="text-slate-500 truncate max-w-[280px]">Latest: "{inspectedRecentTitles[0]}"</span>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Creator Details Preview & Inputs -->
-          <div class="space-y-4">
-            {#if newCreatorAvatar || newCreatorSubs}
-              <div class="flex items-center gap-3.5 p-3 bg-purple-950/30 border border-purple-900/60">
-                {#if newCreatorAvatar}
-                  <img
-                    src={newCreatorAvatar}
-                    alt={newCreatorName || 'Creator Avatar'}
-                    class="w-12 h-12 rounded-full border border-purple-600 object-cover shrink-0"
-                    onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
-                  />
-                {/if}
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-bold text-white text-sm font-display">{newCreatorName || 'Creator'}</span>
-                    {#if newCreatorSubs}
-                      <span class="px-2 py-0.5 bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-mono">
-                        {newCreatorSubs}
-                      </span>
-                    {/if}
-                  </div>
-                  <span class="text-xs text-purple-300 font-mono">{newCreatorHandle || '@handle'}</span>
-                </div>
-              </div>
-            {/if}
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Creator Name</label>
-                <input
-                  type="text"
-                  bind:value={newCreatorName}
-                  placeholder="e.g. Fireship"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Handle</label>
-                <input
-                  type="text"
-                  bind:value={newCreatorHandle}
-                  placeholder="e.g. @fireship"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Public Profile URL</label>
-                <input
-                  type="url"
-                  bind:value={newCreatorUrl}
-                  placeholder="https://youtube.com/@handle"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Subscriber / Follower Count</label>
-                <input
-                  type="text"
-                  bind:value={newCreatorSubs}
-                  placeholder="e.g. 3.2M subscribers"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Topic Niche</label>
-                <input
-                  type="text"
-                  bind:value={newCreatorTopicNiche}
-                  placeholder="e.g. Software Engineering & Satire"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-              <div>
-                <label class="block text-[11px] font-mono text-slate-400 mb-1">Pacing & Rhythm Style</label>
-                <input
-                  type="text"
-                  bind:value={newCreatorPacing}
-                  placeholder="e.g. 100s fast sprints, high density, dry sarcasm"
-                  class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                />
-              </div>
-            </div>
-
-            <!-- Signature Hook Formulas -->
-            <div class="space-y-2 p-3 bg-black/40 border border-purple-900/60">
-              <label class="block text-xs font-mono text-amber-400 font-bold uppercase tracking-wider">
-                Signature Hook Formulas
-              </label>
-              <div class="flex gap-2">
-                <input
-                  type="text"
-                  bind:value={newHookInput}
-                  placeholder="Add hook formula (e.g. 'X is dead. Here is what actually replaced it.')"
-                  class="flex-1 px-3 py-1.5 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-                  onkeydown={(e) => e.key === 'Enter' && addHookFormula()}
-                />
+            <!-- Step Progress Indicator -->
+            <div class="flex items-center gap-1.5">
+              {#each [1, 2, 3] as s}
                 <button
                   type="button"
-                  onclick={addHookFormula}
-                  class="px-3 py-1.5 bg-purple-900 text-amber-300 hover:bg-purple-800 text-xs font-mono font-bold"
+                  onclick={() => {
+                    if (editingWatchlistId || s === 1 || (s === 2 && (newCreatorName || scannerInput)) || (s === 3 && newCreatorName)) {
+                      watchlistStep = s as 1 | 2 | 3;
+                    }
+                  }}
+                  class="flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded transition-all {watchlistStep === s ? 'bg-amber-400 text-black font-bold' : 'bg-purple-950/60 text-slate-400 hover:text-white'}"
                 >
-                  + Add Hook
+                  <span>{s}</span>
+                  <span class="hidden sm:inline">
+                    {s === 1 ? 'Link' : s === 2 ? 'Profile' : 'Hooks'}
+                  </span>
                 </button>
-              </div>
-              {#if newCreatorHooks.length > 0}
-                <div class="space-y-1.5 pt-1">
-                  {#each newCreatorHooks as hook, idx}
-                    <div class="flex items-center justify-between gap-2 p-2 bg-black border border-purple-900/80 text-xs font-mono text-slate-200">
-                      <span class="truncate">"{hook}"</span>
-                      <button
-                        type="button"
-                        onclick={() => removeHookFormula(idx)}
-                        class="text-slate-500 hover:text-rose-400 text-xs px-1"
-                        title="Remove hook"
-                      >
-                        ✕
-                      </button>
-                    </div>
+              {/each}
+              <button
+                onclick={() => (showAddWatchlist = false)}
+                class="ml-2 text-xs font-mono text-slate-400 hover:text-white px-2 py-1"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- STEP 1: Link & Platform -->
+          {#if watchlistStep === 1}
+            <div class="space-y-5 py-2">
+              <!-- Platform Selection Cards -->
+              <div class="space-y-1.5">
+                <label class="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  1. Platform
+                </label>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {#each ['YouTube', 'X', 'TikTok', 'LinkedIn', 'Instagram'] as plat}
+                    <button
+                      type="button"
+                      onclick={() => (newCreatorPlatform = plat)}
+                      class="py-2.5 px-3 text-xs font-mono font-medium border text-center transition-all {newCreatorPlatform === plat ? 'bg-amber-400 text-black border-amber-300 font-bold shadow-sm' : 'bg-black/60 border-purple-900/80 text-slate-300 hover:border-purple-600'}"
+                    >
+                      {plat === 'X' ? 'X (Twitter)' : plat}
+                    </button>
                   {/each}
                 </div>
+              </div>
+
+              <!-- Channel URL or Handle Input -->
+              <div class="space-y-1.5">
+                <label class="block text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+                  2. Channel URL or Handle
+                </label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    bind:value={scannerInput}
+                    placeholder={newCreatorPlatform === 'YouTube' ? 'e.g. youtube.com/channel/UC... or @fireship' : 'e.g. https://... or @handle'}
+                    class="flex-1 px-3.5 py-2.5 bg-black border border-purple-900 text-white text-xs font-mono placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                    onkeydown={(e) => e.key === 'Enter' && handleScanCreator()}
+                  />
+                  <button
+                    type="button"
+                    onclick={handleScanCreator}
+                    disabled={isScanningCreator}
+                    class="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-mono tracking-wider transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
+                  >
+                    {#if isScanningCreator}
+                      <RefreshCw class="w-4 h-4 animate-spin text-black" />
+                      <span>Analyzing Profile...</span>
+                    {:else}
+                      <Search class="w-4 h-4 text-black" />
+                      <span>Analyze Creator →</span>
+                    {/if}
+                  </button>
+                </div>
+                {#if scanError}
+                  <p class="text-xs text-rose-400 font-mono mt-1">{scanError}</p>
+                {/if}
+              </div>
+
+              <div class="flex items-center justify-between pt-2 border-t border-purple-900/40 text-xs font-mono text-slate-500">
+                <span>Auto-populates avatar, verified handle, recent uploads, and pacing style</span>
+                <button
+                  type="button"
+                  onclick={() => (watchlistStep = 2)}
+                  class="text-purple-300 hover:text-amber-400 hover:underline"
+                >
+                  Skip analysis and fill manually →
+                </button>
+              </div>
+            </div>
+
+          <!-- STEP 2: Review Profile & Telemetry -->
+          {:else if watchlistStep === 2}
+            <div class="space-y-4 py-2">
+              <!-- Populated Creator Header Preview -->
+              {#if newCreatorAvatar || newCreatorSubs || newCreatorName}
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-purple-950/40 border border-purple-800/60 rounded">
+                  <div class="flex items-center gap-3.5">
+                    {#if newCreatorAvatar}
+                      <img
+                        src={newCreatorAvatar}
+                        alt={newCreatorName || 'Creator Avatar'}
+                        class="w-12 h-12 rounded-full border border-purple-500 object-cover shrink-0"
+                        onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
+                      />
+                    {:else}
+                      <div class="w-12 h-12 rounded-full bg-purple-900 border border-purple-700 flex items-center justify-center text-amber-300 font-bold font-display text-base shrink-0">
+                        {(newCreatorName || 'C').charAt(0).toUpperCase()}
+                      </div>
+                    {/if}
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="font-bold text-white text-sm font-display">{newCreatorName || 'Creator'}</span>
+                        {#if newCreatorSubs}
+                          <span class="px-2 py-0.5 bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[10px] font-mono">
+                            {newCreatorSubs}
+                          </span>
+                        {/if}
+                        <span class="px-1.5 py-0.5 bg-purple-900/60 text-purple-200 text-[10px] font-mono">
+                          {newCreatorPlatform}
+                        </span>
+                      </div>
+                      <span class="text-xs text-purple-300 font-mono">{newCreatorHandle || '@handle'}</span>
+                    </div>
+                  </div>
+
+                  {#if inspectedRecentTitles.length > 0}
+                    <div class="text-left sm:text-right">
+                      <span class="text-[11px] font-mono text-emerald-400">✓ {inspectedRecentTitles.length} Recent Uploads Scanned</span>
+                      <span class="block text-[10px] font-mono text-slate-500 truncate max-w-[280px]">Latest: "{inspectedRecentTitles[0]}"</span>
+                    </div>
+                  {/if}
+                </div>
               {/if}
+
+              <!-- Editable Form Fields -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Creator Name</label>
+                  <input
+                    type="text"
+                    bind:value={newCreatorName}
+                    placeholder="e.g. Daniel Bourke"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Handle</label>
+                  <input
+                    type="text"
+                    bind:value={newCreatorHandle}
+                    placeholder="e.g. @mrdbourke"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Public Profile Link</label>
+                  <input
+                    type="url"
+                    bind:value={newCreatorUrl}
+                    placeholder="https://youtube.com/@handle"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Followers / Subscribers</label>
+                  <input
+                    type="text"
+                    bind:value={newCreatorSubs}
+                    placeholder="e.g. 253K subscribers"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Topic Niche</label>
+                  <input
+                    type="text"
+                    bind:value={newCreatorTopicNiche}
+                    placeholder="e.g. Machine Learning & Engineering"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Pacing & Rhythm Style</label>
+                  <input
+                    type="text"
+                    bind:value={newCreatorPacing}
+                    placeholder="e.g. Fast sprints, whiteboard diagrams, high density"
+                    class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <!-- Navigation Actions -->
+              <div class="flex items-center justify-between pt-3 border-t border-purple-900/60">
+                <button
+                  type="button"
+                  onclick={() => (watchlistStep = 1)}
+                  class="px-4 py-2 bg-black border border-purple-900 hover:border-purple-700 text-xs text-slate-300 font-mono"
+                >
+                  ← Back to Link
+                </button>
+                <button
+                  type="button"
+                  onclick={() => (watchlistStep = 3)}
+                  class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-mono tracking-wider"
+                >
+                  Next: Signature Hooks & Angles →
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label class="block text-[11px] font-mono text-slate-400 mb-1">Observed Techniques & Storytelling Notes</label>
-              <textarea
-                bind:value={newCreatorNotes}
-                placeholder="Observed techniques: Pacing, video hooks, retention tricks, audio setup..."
-                rows={2}
-                class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-              ></textarea>
-            </div>
+          <!-- STEP 3: Signature Hooks & Strategy -->
+          {:else if watchlistStep === 3}
+            <div class="space-y-4 py-2">
+              <!-- Signature Hook Formulas -->
+              <div class="space-y-2 p-3.5 bg-black/50 border border-purple-900/70">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-mono text-amber-400 font-bold uppercase tracking-wider">
+                    Signature Hook Formulas
+                  </label>
+                  <span class="text-[11px] font-mono text-slate-500">Auto-extracted from top videos</span>
+                </div>
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    bind:value={newHookInput}
+                    placeholder="Add hook formula (e.g. 'X is dead. Here is what actually replaced it.')"
+                    class="flex-1 px-3 py-1.5 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                    onkeydown={(e) => e.key === 'Enter' && addHookFormula()}
+                  />
+                  <button
+                    type="button"
+                    onclick={addHookFormula}
+                    class="px-3.5 py-1.5 bg-purple-900 text-amber-300 hover:bg-purple-800 text-xs font-mono font-bold"
+                  >
+                    + Add Hook
+                  </button>
+                </div>
+                {#if newCreatorHooks.length > 0}
+                  <div class="space-y-1.5 pt-1">
+                    {#each newCreatorHooks as hook, idx}
+                      <div class="flex items-center justify-between gap-2 p-2 bg-black border border-purple-900/80 text-xs font-mono text-slate-200">
+                        <span class="truncate">"{hook}"</span>
+                        <button
+                          type="button"
+                          onclick={() => removeHookFormula(idx)}
+                          class="text-slate-500 hover:text-rose-400 text-xs px-1"
+                          title="Remove hook"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
 
-            <div>
-              <label class="block text-[11px] font-mono text-slate-400 mb-1">How to Emulate in Your Niche (Original Angles)</label>
-              <textarea
-                bind:value={newCreatorAngles}
-                placeholder="How to adapt their rhythm or style without copying content topics..."
-                rows={2}
-                class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-              ></textarea>
-            </div>
-          </div>
+              <!-- Notes & Angles -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">Observed Techniques & Storytelling Notes</label>
+                  <textarea
+                    bind:value={newCreatorNotes}
+                    placeholder="Observed techniques: Pacing, video hooks, retention tricks, audio setup..."
+                    rows={3}
+                    class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  ></textarea>
+                </div>
 
-          <div class="flex justify-end gap-2.5 pt-2 border-t border-purple-900/60">
-            <button
-              type="button"
-              onclick={() => (showAddWatchlist = false)}
-              class="px-3.5 py-2 text-xs text-slate-400 hover:text-white font-mono"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onclick={handleSaveWatchlist}
-              class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider"
-            >
-              {editingWatchlistId ? 'Save Changes' : 'Save Creator'}
-            </button>
-          </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-slate-400 mb-1">How to Emulate in Your Niche (Original Angles)</label>
+                  <textarea
+                    bind:value={newCreatorAngles}
+                    placeholder="How to adapt their rhythm or style without copying content topics..."
+                    rows={3}
+                    class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  ></textarea>
+                </div>
+              </div>
+
+              <!-- Final Save Actions -->
+              <div class="flex items-center justify-between pt-3 border-t border-purple-900/60">
+                <button
+                  type="button"
+                  onclick={() => (watchlistStep = 2)}
+                  class="px-4 py-2 bg-black border border-purple-900 hover:border-purple-700 text-xs text-slate-300 font-mono"
+                >
+                  ← Back to Profile
+                </button>
+                <div class="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onclick={() => (showAddWatchlist = false)}
+                    class="px-3.5 py-2 text-xs text-slate-400 hover:text-white font-mono"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onclick={handleSaveWatchlist}
+                    class="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-mono tracking-wider shadow-sm"
+                  >
+                    {editingWatchlistId ? 'Save Changes' : 'Save Creator to Watchlist'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
 
