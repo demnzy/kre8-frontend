@@ -220,6 +220,8 @@ export const api = {
     tone?: string;
     target_duration_seconds?: number;
     custom_instructions?: string;
+    creator_watchlist_id?: number;
+    creator_style?: Record<string, any>;
   }) =>
     request<{
       title: string;
@@ -293,6 +295,18 @@ export const api = {
   },
   createIdea: (idea: Partial<ContentIdea>) =>
     request<ContentIdea>('/ideas', { method: 'POST', body: JSON.stringify(idea) }),
+  synthesizeIdeas: (payload: {
+    source_type: 'news' | 'watchlist' | 'hybrid' | 'topic';
+    news_article_id?: number;
+    creator_watchlist_id?: number;
+    topic_prompt?: string;
+    count?: number;
+  }) =>
+    request<ContentIdea[]>('/ideas/synthesize', {
+      timeoutMs: AI_TIMEOUT_MS,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
   updateIdea: (id: number, idea: Partial<ContentIdea>) =>
     request<ContentIdea>(`/ideas/${id}`, { method: 'PUT', body: JSON.stringify(idea) }),
   deleteIdea: (id: number) =>

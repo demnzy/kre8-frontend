@@ -29,7 +29,8 @@
     Video,
     Zap,
     Flame,
-    ArrowUpRight
+    ArrowUpRight,
+    Lightbulb
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import { getProviderInfo } from '../../utils/aiProviders';
@@ -302,6 +303,25 @@
       autoGenerate: false
     });
     appState.showToast(`Loaded "${upload.title}" into Script Studio!`, 'info');
+  }
+
+  async function handleSaveFollowupIdea(upload: RecentUploadItem) {
+    try {
+      const idea = await api.createIdea({
+        title: `Follow-up to "${upload.title}"`,
+        description: `Expanding on top audience response (${formatCount(upload.views)} views, ${upload.engagement_rate || 0}% engagement).`,
+        category: appState.preferences.primary_niche,
+        intended_platform: activeTab === 'all' ? 'YouTube' : activeTab.toUpperCase(),
+        priority: 'High',
+        tags: ['telemetry-proven', 'follow-up', activeTab],
+        status: 'Active',
+        notes: `Telemetry Source:\nOriginal Video: ${upload.title}\nViews: ${formatCount(upload.views)}\nEngagement: ${upload.engagement_rate || 0}%\nPublished: ${upload.published_at}`
+      });
+      appState.counts.ideas = (appState.counts.ideas || 0) + 1;
+      appState.showToast(`Saved follow-up idea to Ideas Bank: "${idea.title}"`, 'success');
+    } catch (e: any) {
+      appState.showToast(e.message || 'Could not save idea', 'error');
+    }
   }
 
   function formatCount(num?: number | null): string {
@@ -837,7 +857,15 @@
                     title="Draft a follow-up or breakdown script inspired by this video"
                   >
                     <FileCode class="w-3 h-3 text-black" />
-                    <span>Draft Similar Angle</span>
+                    <span>Draft Script</span>
+                  </button>
+
+                  <button
+                    onclick={() => handleSaveFollowupIdea(vid)}
+                    class="p-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 transition-colors"
+                    title="Save follow-up angle to Ideas Bank"
+                  >
+                    <Lightbulb class="w-3.5 h-3.5" />
                   </button>
 
                   {#if vid.url}

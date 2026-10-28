@@ -43,6 +43,12 @@ export class AppState {
     custom_instructions?: string;
     content_item_id?: number;
     autoGenerate?: boolean;
+    creator_watchlist_id?: number;
+    creator_name?: string;
+    creator_handle?: string;
+    creator_pacing?: string;
+    creator_hooks?: string[];
+    creator_style?: Record<string, any>;
   } | null>(null);
 
   // Preferences
@@ -168,6 +174,12 @@ export class AppState {
     custom_instructions?: string;
     content_item_id?: number;
     autoGenerate?: boolean;
+    creator_watchlist_id?: number;
+    creator_name?: string;
+    creator_handle?: string;
+    creator_pacing?: string;
+    creator_hooks?: string[];
+    creator_style?: Record<string, any>;
   }) {
     this.pendingScriptDraft = draft;
     this.setModule('scripts');

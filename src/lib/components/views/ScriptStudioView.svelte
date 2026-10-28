@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
-  import type { Script, ScriptClip, ScriptVersion, ContentItem } from '../../types';
+  import type { Script, ScriptClip, ScriptVersion, ContentItem, CreatorWatchlist } from '../../types';
   import {
     FileCode,
     Sparkles,
@@ -20,7 +20,9 @@
     History,
     Settings,
     Video,
-    FolderOpen
+    FolderOpen,
+    Users,
+    Zap
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import LoadError from '../layout/LoadError.svelte';
@@ -85,6 +87,12 @@
   let promptFormat = $state('Short Video');
   let promptDuration = $state(60);
 
+  let watchlistCreators = $state<CreatorWatchlist[]>([]);
+  let selectedCreatorId = $state<number | null>(null);
+  let activeCreator = $derived(
+    selectedCreatorId ? (watchlistCreators.find(c => c.id === selectedCreatorId) || null) : null
+  );
+
   onMount(loadScripts);
 
   $effect(() => {
@@ -104,10 +112,22 @@
     custom_instructions?: string;
     content_item_id?: number;
     autoGenerate?: boolean;
+    creator_watchlist_id?: number;
+    creator_name?: string;
+    creator_handle?: string;
+    creator_pacing?: string;
+    creator_hooks?: string[];
+    creator_style?: Record<string, any>;
   }) {
     promptTopic = draft.topic;
     if (draft.format) promptFormat = draft.format;
     if (draft.tone) promptTone = draft.tone;
+    if (draft.creator_watchlist_id) {
+      selectedCreatorId = draft.creator_watchlist_id;
+    } else if (draft.creator_name && watchlistCreators.length > 0) {
+      const match = watchlistCreators.find(c => c.creator_name.toLowerCase() === draft.creator_name!.toLowerCase());
+      if (match) selectedCreatorId = match.id;
+    }
 
     const combinedContext = [
       draft.custom_instructions,
@@ -273,7 +293,17 @@
         tone: tone,
         format: format,
         target_duration_seconds: duration,
-        custom_instructions: customInstructions || pendingCustomInstructions
+        custom_instructions: customInstructions || pendingCustomInstructions,
+        creator_watchlist_id: selectedCreatorId || undefined,
+        creator_style: activeCreator ? {
+          creator_name: activeCreator.creator_name,
+          handle: activeCreator.handle,
+          platform: activeCreator.platform,
+          pacing_style: activeCreator.pacing_style,
+          signature_hooks: activeCreator.signature_hooks,
+          personal_notes: activeCreator.personal_notes,
+          original_angles: activeCreator.original_angles
+        } : undefined
       });
 
       const saved = await api.createScript({
@@ -307,12 +337,14 @@
   async function loadScripts() {
     loadError = null;
     try {
-      const [loadedScripts, loadedContent] = await Promise.all([
+      const [loadedScripts, loadedContent, loadedWatchlist] = await Promise.all([
         api.getScripts(),
-        api.getContentItems().catch(() => [] as ContentItem[])
+        api.getContentItems().catch(() => [] as ContentItem[]),
+        api.getWatchlist().catch(() => [] as CreatorWatchlist[])
       ]);
       scripts = loadedScripts;
       contentItems = loadedContent;
+      watchlistCreators = loadedWatchlist;
       appState.counts.scripts = scripts.length;
       if (scripts.length > 0) {
         if (!activeScript || activeScript.id !== 0) {
@@ -637,6 +669,25 @@
             </span>
           </div>
 
+          {#if activeCreator}
+            <div class="flex items-center justify-between p-2.5 bg-purple-950/40 border border-purple-800 text-xs font-mono">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span class="text-amber-400 font-bold">Emulating {activeCreator.creator_name} ({activeCreator.handle})</span>
+                {#if activeCreator.pacing_style}
+                  <span class="text-slate-400 hidden sm:inline">• {activeCreator.pacing_style}</span>
+                {/if}
+              </div>
+              <button
+                type="button"
+                onclick={() => (selectedCreatorId = null)}
+                class="text-[10px] text-slate-400 hover:text-white underline"
+              >
+                Clear Persona
+              </button>
+            </div>
+          {/if}
+
           <!-- Version History Bar -->
           {#if activeScript.versions && activeScript.versions.length > 0}
             <div class="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 border-b border-purple-900/30">
@@ -886,6 +937,30 @@
                 {/each}
               </div>
             {/if}
+
+            {#if activeCreator && activeCreator.signature_hooks && activeCreator.signature_hooks.length > 0}
+              <div class="space-y-2 pt-3 border-t border-purple-900/40">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-1.5">
+                    <Zap class="w-3.5 h-3.5 text-amber-400" />
+                    <span class="swiss-tag text-amber-400">{activeCreator.creator_name}'s Hook Formulas</span>
+                  </div>
+                  <span class="text-[10px] font-mono text-purple-400">Watchlist</span>
+                </div>
+                {#each activeCreator.signature_hooks as hook}
+                  <div class="p-2.5 bg-black border border-amber-400/30 flex items-center justify-between gap-3 text-xs text-amber-200 font-mono group">
+                    <span>"{hook}"</span>
+                    <button
+                      type="button"
+                      onclick={() => insertTextSnippet(hook, 'start')}
+                      class="px-2 py-1 bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold shrink-0 transition-colors"
+                    >
+                      + Use Hook
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -1037,6 +1112,46 @@
                 <option value="Story-Driven & Energetic">Story-Driven & Energetic</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="script-modal-creator" class="block swiss-tag text-slate-400">Creator Persona / Watchlist Voice</label>
+              <button
+                type="button"
+                onclick={() => appState.setModule('discover')}
+                class="text-[10px] font-mono text-amber-400 hover:text-amber-300"
+              >
+                + Manage Watchlist
+              </button>
+            </div>
+            <select
+              id="script-modal-creator"
+              value={selectedCreatorId ?? ''}
+              onchange={(e) => {
+                const val = e.currentTarget.value;
+                selectedCreatorId = val ? Number(val) : null;
+              }}
+              class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
+            >
+              <option value="">Default Voice (No creator emulation)</option>
+              {#each watchlistCreators as creator}
+                <option value={creator.id}>
+                  {creator.creator_name} ({creator.handle}) {creator.pacing_style ? `— ${creator.pacing_style}` : ''}
+                </option>
+              {/each}
+            </select>
+            {#if activeCreator}
+              <div class="p-2.5 mt-2 bg-amber-400/10 border border-amber-400/20 text-xs font-mono text-amber-300 space-y-1">
+                <div class="flex items-center gap-1.5 font-bold">
+                  <Zap class="w-3.5 h-3.5 text-amber-400" />
+                  <span>Emulating {activeCreator.creator_name}</span>
+                </div>
+                {#if activeCreator.pacing_style}
+                  <p class="text-[11px] text-slate-300">Pacing: {activeCreator.pacing_style}</p>
+                {/if}
+              </div>
+            {/if}
           </div>
 
           <div class="flex justify-end gap-2 pt-3 border-t border-purple-900/40">

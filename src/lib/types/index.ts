@@ -269,6 +269,14 @@ export interface CreatorWatchlist {
   original_angles?: string;
 }
 
+export interface IdeasSynthesizeRequest {
+  source_type: 'news' | 'watchlist' | 'hybrid' | 'topic';
+  news_article_id?: number;
+  creator_watchlist_id?: number;
+  topic_prompt?: string;
+  count?: number;
+}
+
 export interface CreatorInspectResult {
   success: boolean;
   creator_name: string;

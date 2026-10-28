@@ -3,7 +3,7 @@
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
   import LoadError from '../layout/LoadError.svelte';
-  import type { ContentIdea } from '../../types';
+  import type { ContentIdea, NewsArticle, CreatorWatchlist } from '../../types';
   import {
     Lightbulb,
     Plus,
@@ -14,9 +14,14 @@
     Trash2,
     Search,
     Pencil,
-    X
+    X,
+    Zap,
+    ExternalLink,
+    Check,
+    Bookmark
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
+  import { getProviderInfo } from '../../utils/aiProviders';
 
   let ideas = $state<ContentIdea[]>([]);
   let searchQuery = $state('');
@@ -33,6 +38,19 @@
   let formPriority = $state<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
   let formTags = $state('ai, tutorial');
   let loadError = $state<string | null>(null);
+
+  // AI Brainstorm Hub State
+  let showBrainstormModal = $state(false);
+  let brainstormMode = $state<'news' | 'watchlist' | 'hybrid' | 'topic'>('news');
+  let newsArticles = $state<NewsArticle[]>([]);
+  let watchlist = $state<CreatorWatchlist[]>([]);
+  let selectedArticleId = $state<number | null>(null);
+  let selectedWatchlistId = $state<number | null>(null);
+  let customTopicPrompt = $state('');
+  let isSynthesizing = $state(false);
+  let synthesizedIdeas = $state<ContentIdea[]>([]);
+
+  let activeProvider = $derived(getProviderInfo(appState.preferences.ai_provider));
 
   onMount(loadIdeas);
 
@@ -149,6 +167,63 @@
       appState.showToast(e.message || 'Failed to save', 'error');
     }
   }
+
+  async function openBrainstormModal(initialMode: 'news' | 'watchlist' | 'hybrid' | 'topic' = 'news', creatorId?: number) {
+    if (!appState.requireApiKey()) return;
+    brainstormMode = initialMode;
+    synthesizedIdeas = [];
+    if (creatorId) selectedWatchlistId = creatorId;
+
+    showBrainstormModal = true;
+
+    // Load news if empty
+    if (newsArticles.length === 0) {
+      try {
+        newsArticles = await api.getDailyNews();
+        if (newsArticles.length > 0 && !selectedArticleId) {
+          selectedArticleId = newsArticles[0].id;
+        }
+      } catch (err) {
+        console.warn('Could not load news for brainstorm:', err);
+      }
+    }
+
+    // Load watchlist if empty
+    if (watchlist.length === 0) {
+      try {
+        watchlist = await api.getWatchlist();
+        if (watchlist.length > 0 && !selectedWatchlistId) {
+          selectedWatchlistId = watchlist[0].id;
+        }
+      } catch (err) {
+        console.warn('Could not load watchlist for brainstorm:', err);
+      }
+    }
+  }
+
+  async function handleRunBrainstorm() {
+    if (!appState.requireApiKey()) return;
+    isSynthesizing = true;
+    try {
+      appState.showToast(`Synthesizing tailored angles with ${activeProvider.name}...`, 'info');
+      const generated = await api.synthesizeIdeas({
+        source_type: brainstormMode,
+        news_article_id: (brainstormMode === 'news' || brainstormMode === 'hybrid') ? (selectedArticleId || undefined) : undefined,
+        creator_watchlist_id: (brainstormMode === 'watchlist' || brainstormMode === 'hybrid') ? (selectedWatchlistId || undefined) : undefined,
+        topic_prompt: customTopicPrompt.trim() || undefined,
+        count: 3
+      });
+
+      synthesizedIdeas = generated;
+      ideas = [...generated, ...ideas];
+      appState.counts.ideas = ideas.length;
+      appState.showToast(`Synthesized and saved ${generated.length} ideas to your bank!`, 'success');
+    } catch (e: any) {
+      appState.showToast(e.message || 'Brainstorming failed', 'error');
+    } finally {
+      isSynthesizing = false;
+    }
+  }
 </script>
 
 <div class="space-y-6 animate-in fade-in duration-300">
@@ -179,18 +254,28 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-2.5">
         <button
           onclick={() => appState.setModule('discover')}
-          class="flex items-center gap-2 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/50 text-amber-300 border border-purple-700/60 text-xs font-mono"
+          class="flex items-center gap-2 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/50 text-slate-300 hover:text-amber-300 border border-purple-700/60 text-xs font-mono transition-all"
+          title="Browse daily news articles in Discover"
         >
-          <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+          <ExternalLink class="w-3.5 h-3.5 text-purple-400" />
           <span>Suggest from News</span>
         </button>
 
         <button
+          onclick={() => openBrainstormModal('news')}
+          class="flex items-center gap-2 px-3.5 py-2 bg-purple-900/50 hover:bg-purple-800/60 text-amber-300 border border-purple-700 text-xs font-mono font-bold transition-all"
+          title="Synthesize ideas from breaking news or watched creator voices"
+        >
+          <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+          <span>AI Brainstorm Hub</span>
+        </button>
+
+        <button
           onclick={openCreateModal}
-          class="flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider"
+          class="flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all"
         >
           <Plus class="w-4 h-4" />
           <span>Add Idea</span>
@@ -444,6 +529,212 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- AI Brainstorm & Cross-Pillar Synthesis Hub Modal -->
+  {#if showBrainstormModal}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+      <div class="relative w-full max-w-2xl swiss-card border border-amber-500/50 bg-[#10071c] p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between border-b border-purple-900/60 pb-3">
+          <div class="flex items-center gap-2">
+            <Sparkles class="w-4 h-4 text-amber-400" />
+            <h3 class="text-base font-bold text-white font-display">AI Brainstorm & Synthesis Hub</h3>
+            <span class="swiss-tag text-[9px] text-amber-400 font-mono">{activeProvider.name}</span>
+          </div>
+          <button
+            onclick={() => (showBrainstormModal = false)}
+            class="text-xs font-mono text-slate-400 hover:text-white px-2 py-1"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Mode Tabs -->
+        <div class="flex items-center gap-2 border-b border-purple-900/40 pb-2 overflow-x-auto">
+          {#each [
+            { id: 'news', label: 'From Trending News', icon: ExternalLink },
+            { id: 'watchlist', label: 'From Creator Voice', icon: Zap },
+            { id: 'hybrid', label: 'Hybrid (News + Creator)', icon: Sparkles },
+            { id: 'topic', label: 'Custom Topic / Niche', icon: Lightbulb }
+          ] as tab}
+            <button
+              type="button"
+              onclick={() => (brainstormMode = tab.id as any)}
+              class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono tracking-wider transition-all border {brainstormMode === tab.id
+                ? 'bg-amber-400 text-black font-bold border-amber-400'
+                : 'bg-black/60 text-slate-300 border-purple-900/60 hover:border-purple-600'}"
+            >
+              {@const Icon = tab.icon}
+              <Icon class="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+            </button>
+          {/each}
+        </div>
+
+        <div class="space-y-4">
+          <!-- 1. News Picker (if news or hybrid) -->
+          {#if brainstormMode === 'news' || brainstormMode === 'hybrid'}
+            <div class="space-y-2">
+              <label class="block swiss-tag text-slate-300">Select Breaking News Headline</label>
+              {#if newsArticles.length === 0}
+                <div class="p-4 bg-black/60 border border-purple-900 text-xs font-mono text-slate-400 text-center">
+                  Loading trending news stories...
+                </div>
+              {:else}
+                <select
+                  value={selectedArticleId ?? ''}
+                  onchange={(e) => (selectedArticleId = Number(e.currentTarget.value) || null)}
+                  class="w-full p-2.5 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400"
+                >
+                  {#each newsArticles as article}
+                    <option value={article.id}>
+                      [{article.source_name || 'News'}] {article.headline}
+                    </option>
+                  {/each}
+                </select>
+                {#if selectedArticleId}
+                  {@const chosenArt = newsArticles.find(a => a.id === selectedArticleId)}
+                  {#if chosenArt}
+                    <p class="text-xs text-slate-400 p-2.5 bg-black/40 border border-purple-950 font-mono leading-relaxed line-clamp-2">
+                      {chosenArt.summary}
+                    </p>
+                  {/if}
+                {/if}
+              {/if}
+            </div>
+          {/if}
+
+          <!-- 2. Watchlist Creator Picker (if watchlist or hybrid) -->
+          {#if brainstormMode === 'watchlist' || brainstormMode === 'hybrid'}
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="block swiss-tag text-slate-300">Select Creator Watchlist Persona</label>
+                <button
+                  type="button"
+                  onclick={() => appState.setModule('discover')}
+                  class="text-[10px] font-mono text-amber-400 hover:text-amber-300"
+                >
+                  + Add Creators in Discover
+                </button>
+              </div>
+
+              {#if watchlist.length === 0}
+                <div class="p-4 bg-black/60 border border-purple-900 text-xs font-mono text-slate-400 text-center space-y-1">
+                  <p>Your Watchlist is empty.</p>
+                  <p class="text-[11px] text-amber-400">Add admired creators in Discover to brainstorm in their voice and rhythm.</p>
+                </div>
+              {:else}
+                <select
+                  value={selectedWatchlistId ?? ''}
+                  onchange={(e) => (selectedWatchlistId = Number(e.currentTarget.value) || null)}
+                  class="w-full p-2.5 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400"
+                >
+                  {#each watchlist as creator}
+                    <option value={creator.id}>
+                      {creator.creator_name} ({creator.handle}) — {creator.pacing_style || creator.platform}
+                    </option>
+                  {/each}
+                </select>
+
+                {#if selectedWatchlistId}
+                  {@const chosenCreator = watchlist.find(w => w.id === selectedWatchlistId)}
+                  {#if chosenCreator}
+                    <div class="p-3 bg-amber-400/10 border border-amber-400/20 text-xs font-mono text-amber-300 space-y-1">
+                      <div class="flex items-center justify-between">
+                        <span class="font-bold">{chosenCreator.creator_name} ({chosenCreator.handle})</span>
+                        <span class="text-[10px] text-purple-300">{chosenCreator.subscriber_count_text || chosenCreator.platform}</span>
+                      </div>
+                      {#if chosenCreator.pacing_style}
+                        <p class="text-[11px] text-slate-300">Pacing: {chosenCreator.pacing_style}</p>
+                      {/if}
+                      {#if chosenCreator.signature_hooks && chosenCreator.signature_hooks.length > 0}
+                        <div class="text-[10px] text-amber-200/80 pt-1">
+                          Hook Example: "{chosenCreator.signature_hooks[0]}"
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                {/if}
+              {/if}
+            </div>
+          {/if}
+
+          <!-- 3. Optional Custom Theme/Prompt -->
+          <div class="space-y-1.5">
+            <label class="block swiss-tag text-slate-300">
+              {brainstormMode === 'topic' ? 'Topic / Focus Theme (Required)' : 'Specific Angle / Custom Directive (Optional)'}
+            </label>
+            <input
+              type="text"
+              bind:value={customTopicPrompt}
+              placeholder={brainstormMode === 'topic' ? 'e.g. 5 AI workflows saving 10 hours a week' : 'e.g. Focus on practical pitfalls or contrarian takes...'}
+              class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+            />
+          </div>
+        </div>
+
+        <!-- Synthesized Results Display -->
+        {#if synthesizedIdeas.length > 0}
+          <div class="space-y-3 pt-3 border-t border-purple-900/60">
+            <div class="flex items-center justify-between">
+              <span class="swiss-tag text-amber-400 font-bold">Generated & Saved into Ideas Bank:</span>
+              <span class="text-[10px] font-mono text-slate-400">{synthesizedIdeas.length} ideas banked</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2.5 max-h-56 overflow-y-auto pr-1">
+              {#each synthesizedIdeas as idea}
+                <div class="p-3 bg-black/80 border border-purple-900/80 flex items-start justify-between gap-3 text-xs font-mono">
+                  <div class="space-y-1 flex-1">
+                    <h4 class="font-bold text-white text-xs font-display">{idea.title}</h4>
+                    {#if idea.description}
+                      <p class="text-[11px] text-slate-400 line-clamp-1">{idea.description}</p>
+                    {/if}
+                  </div>
+                  <button
+                    type="button"
+                    onclick={() => {
+                      showBrainstormModal = false;
+                      const combinedNotes = [idea.description, idea.notes].filter(Boolean).join('\n\n');
+                      appState.openScriptStudioWithTopic({
+                        topic: idea.title,
+                        format: 'Short Video',
+                        custom_instructions: combinedNotes || undefined,
+                        creator_watchlist_id: selectedWatchlistId || undefined,
+                        autoGenerate: false
+                      });
+                    }}
+                    class="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-mono font-bold shrink-0 transition-colors"
+                  >
+                    Draft Script
+                  </button>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-between pt-3 border-t border-purple-900/40">
+          <button
+            type="button"
+            onclick={() => (showBrainstormModal = false)}
+            class="px-4 py-2 text-xs text-slate-400 hover:text-white font-mono"
+          >
+            {synthesizedIdeas.length > 0 ? 'Done' : 'Cancel'}
+          </button>
+
+          <button
+            type="button"
+            onclick={handleRunBrainstorm}
+            disabled={isSynthesizing || (brainstormMode === 'topic' && !customTopicPrompt.trim())}
+            class="flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50"
+          >
+            <Sparkles class="w-3.5 h-3.5" />
+            <span>{isSynthesizing ? `Synthesizing with ${activeProvider.name}...` : `Synthesize 3 Ideas with ${activeProvider.name}`}</span>
+          </button>
+        </div>
       </div>
     </div>
   {/if}

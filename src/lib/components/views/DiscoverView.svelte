@@ -315,6 +315,11 @@
       tone: creator.pacing_style || 'Engaging & Direct',
       hooks: creator.signature_hooks && creator.signature_hooks.length > 0 ? creator.signature_hooks : undefined,
       custom_instructions: instructions,
+      creator_watchlist_id: creator.id,
+      creator_name: creator.creator_name,
+      creator_handle: creator.handle,
+      creator_pacing: creator.pacing_style,
+      creator_hooks: creator.signature_hooks,
       autoGenerate: false
     });
     appState.showToast(`Loaded ${creator.creator_name}'s style profile into Script Studio!`, 'info');
