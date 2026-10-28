@@ -566,6 +566,7 @@
       </span>
     </div>
 
+    <!-- Top Row: Title & Utility Actions -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
         <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
@@ -576,10 +577,10 @@
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
+      <div class="flex items-center gap-2 shrink-0">
         <button
           onclick={copyTeleprompterText}
-          class="flex items-center gap-1.5 px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-200 text-xs font-mono transition-all"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-200 text-xs font-mono transition-all"
         >
           {#if isCopied}
             <Check class="w-3.5 h-3.5 text-emerald-400" />
@@ -590,6 +591,20 @@
           {/if}
         </button>
 
+        <button
+          onclick={handleSaveScript}
+          disabled={isSavingScript}
+          class="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono font-bold tracking-wider transition-all disabled:opacity-50"
+        >
+          <Save class="w-3.5 h-3.5" />
+          <span>{isSavingScript ? 'Saving...' : 'Save Draft'}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Generation Control Bar (Dedicated Line) -->
+    <div class="pt-3 border-t border-purple-900/40 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2.5">
         <!-- Video Type Dropdown -->
         <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
           <Film class="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -604,7 +619,7 @@
               else if (val === 'LinkedIn Post') promptDuration = 90;
               if (activeScript) activeScript.target_duration_seconds = promptDuration;
             }}
-            class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[160px] truncate"
+            class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[140px] sm:max-w-[180px] truncate"
           >
             <option value="Short Video" class="bg-[#10071c] text-amber-300">Short Video (60s)</option>
             <option value="YouTube Long" class="bg-[#10071c] text-amber-300">YouTube Long (3-5m)</option>
@@ -622,7 +637,7 @@
                 const val = e.currentTarget.value;
                 selectedCreatorId = val ? Number(val) : null;
               }}
-              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[170px] truncate"
+              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
             >
               <option value="" class="bg-[#10071c] text-slate-300">Default Voice</option>
               {#each watchlistCreators as creator}
@@ -633,35 +648,26 @@
             </select>
           </div>
         {/if}
-
-        <button
-          onclick={() => {
-            const topic = activeScript?.title || promptTopic || 'New Video Script';
-            generateLiveScript(
-              topic,
-              promptTone,
-              promptFormat,
-              promptDuration,
-              pendingCustomInstructions,
-              activeScript?.content_item_id
-            );
-          }}
-          disabled={isGenerating}
-          class="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shadow-md"
-        >
-          <Sparkles class="w-4 h-4 text-black shrink-0 {isGenerating ? 'animate-spin' : ''}" />
-          <span>{isGenerating ? 'Generating...' : `Generate Script with ${activeProviderName}`}</span>
-        </button>
-
-        <button
-          onclick={handleSaveScript}
-          disabled={isSavingScript}
-          class="flex items-center gap-1.5 px-3.5 py-2 bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono font-bold tracking-wider transition-all disabled:opacity-50"
-        >
-          <Save class="w-3.5 h-3.5" />
-          <span>{isSavingScript ? 'Saving...' : 'Save Draft'}</span>
-        </button>
       </div>
+
+      <button
+        onclick={() => {
+          const topic = activeScript?.title || promptTopic || 'New Video Script';
+          generateLiveScript(
+            topic,
+            promptTone,
+            promptFormat,
+            promptDuration,
+            pendingCustomInstructions,
+            activeScript?.content_item_id
+          );
+        }}
+        disabled={isGenerating}
+        class="flex items-center gap-2 px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shadow-md shrink-0"
+      >
+        <Sparkles class="w-4 h-4 text-black shrink-0 {isGenerating ? 'animate-spin' : ''}" />
+        <span>{isGenerating ? 'Generating...' : `Generate Script with ${activeProviderName}`}</span>
+      </button>
     </div>
 
     <!-- Saved Scripts Switcher Bar -->
@@ -708,7 +714,7 @@
 
   {#if activeScript}
     <!-- Two Column Workspace -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
       <!-- Left Column: Script Drafting (7 cols) -->
       <div class="lg:col-span-7 space-y-5">
         <div class="swiss-card p-5 border border-purple-900/60 bg-[#10071c] space-y-4">
@@ -1122,100 +1128,102 @@
       </div>
 
       <!-- Right Column: Scene Breakdown (5 cols) -->
-      <div class="lg:col-span-5 space-y-4">
-        <div class="flex items-center justify-between border-b border-purple-900/40 pb-2">
-          <div class="flex items-center gap-2">
-            <Film class="w-4 h-4 text-amber-400" />
-            <h2 class="font-bold text-sm text-white font-display">Scene Breakdown</h2>
-            <span class="text-[10px] font-mono text-purple-400">[{clipsDurationTotal}s total]</span>
+      <div class="lg:col-span-5 flex flex-col h-full min-w-0">
+        <div class="swiss-card p-5 border border-purple-900/60 bg-[#10071c] flex flex-col flex-1 h-full space-y-4">
+          <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
+            <div class="flex items-center gap-2">
+              <Film class="w-4 h-4 text-amber-400" />
+              <h2 class="font-bold text-sm text-white font-display">Scene Breakdown</h2>
+              <span class="text-[10px] font-mono text-purple-400">[{clipsDurationTotal}s total • {activeScript.clips?.length || 0} scenes]</span>
+            </div>
+
+            <button
+              onclick={handleAddClip}
+              class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-800 text-slate-300 text-xs font-mono hover:text-white hover:border-amber-400/50 transition-colors"
+            >
+              <Plus class="w-3.5 h-3.5 text-amber-400" />
+              <span>Add Scene</span>
+            </button>
           </div>
 
-          <button
-            onclick={handleAddClip}
-            class="flex items-center gap-1 px-2 py-1 bg-black border border-purple-800 text-slate-300 text-xs font-mono hover:text-white"
-          >
-            <Plus class="w-3 h-3" />
-            <span>Add Scene</span>
-          </button>
-        </div>
-
-        {#if !activeScript.clips || activeScript.clips.length === 0}
-          <div class="p-8 text-center swiss-card border border-purple-900/40 text-slate-500 text-xs font-mono space-y-3">
-            <Layers class="w-8 h-8 mx-auto text-purple-600/40" />
-            <p>No scenes generated yet. Click Re-sync Clips to break down your script.</p>
-          </div>
-        {:else}
-          <div class="space-y-3 overflow-y-auto max-h-[82vh] pr-1">
-            {#each activeScript.clips as clip, idx}
-              <div use:reveal={{ delay: Math.min(idx * 50, 300) }} class="swiss-card swiss-card-hover p-4 border border-purple-900/50 bg-[#10071c] hover:border-amber-400/40 transition-all space-y-3">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <span class="w-5 h-5 bg-amber-400 text-black font-bold font-mono text-xs flex items-center justify-center">
-                      {clip.clip_number}
-                    </span>
-                    <span class="text-xs font-bold text-white font-display">Scene {clip.clip_number}</span>
-                  </div>
-
-                  <div class="flex items-center gap-2">
-                    <div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                      <Clock class="w-3 h-3 text-amber-400" />
-                      <input
-                        type="number"
-                        bind:value={clip.estimated_duration}
-                        class="w-10 bg-black border border-purple-900 px-1 text-center text-amber-400 text-xs font-mono"
-                      />
-                      <span>s</span>
+          {#if !activeScript.clips || activeScript.clips.length === 0}
+            <div class="p-8 text-center border border-purple-900/40 text-slate-500 text-xs font-mono flex-1 flex flex-col items-center justify-center space-y-3 bg-black/40">
+              <Layers class="w-8 h-8 text-purple-600/40" />
+              <p>No scenes generated yet. Click Re-sync Clips to break down your script.</p>
+            </div>
+          {:else}
+            <div class="space-y-3 overflow-y-auto flex-1 pr-1 min-h-0">
+              {#each activeScript.clips as clip, idx}
+                <div use:reveal={{ delay: Math.min(idx * 50, 300) }} class="swiss-card swiss-card-hover p-4 border border-purple-900/70 bg-black/60 hover:border-amber-400/40 transition-all space-y-3">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <span class="w-5 h-5 bg-amber-400 text-black font-bold font-mono text-xs flex items-center justify-center">
+                        {clip.clip_number}
+                      </span>
+                      <span class="text-xs font-bold text-white font-display">Scene {clip.clip_number}</span>
                     </div>
 
-                    <button
-                      onclick={() => handleRemoveClip(idx)}
-                      class="text-slate-600 hover:text-rose-400 p-1"
-                    >
-                      <Trash2 class="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+                    <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+                        <Clock class="w-3 h-3 text-amber-400" />
+                        <input
+                          type="number"
+                          bind:value={clip.estimated_duration}
+                          class="w-10 bg-black border border-purple-900 px-1 text-center text-amber-400 text-xs font-mono"
+                        />
+                        <span>s</span>
+                      </div>
 
-                <div>
-                  <label for={`scene-dialogue-${clip.clip_number}`} class="block swiss-tag text-slate-400 mb-1">
-                    Spoken Dialogue
-                  </label>
-                  <textarea
-                    id={`scene-dialogue-${clip.clip_number}`}
-                    bind:value={clip.spoken_dialogue}
-                    rows={2}
-                    placeholder="Spoken words..."
-                    class="w-full p-2 bg-black border border-purple-950 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-400"
-                  ></textarea>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <label for={`scene-visual-${clip.clip_number}`} class="block swiss-tag text-slate-500 mb-0.5">Visual Cues</label>
-                    <input
-                      id={`scene-visual-${clip.clip_number}`}
-                      type="text"
-                      bind:value={clip.visual_direction}
-                      placeholder="e.g. Punch-in zoom"
-                      class="w-full px-2 py-1 bg-black border border-purple-950 text-xs text-slate-300 font-mono focus:outline-none focus:border-amber-400"
-                    />
+                      <button
+                        onclick={() => handleRemoveClip(idx)}
+                        class="text-slate-600 hover:text-rose-400 p-1"
+                      >
+                        <Trash2 class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div>
-                    <label for={`scene-text-${clip.clip_number}`} class="block swiss-tag text-slate-500 mb-0.5">On-Screen Text</label>
-                    <input
-                      id={`scene-text-${clip.clip_number}`}
-                      type="text"
-                      bind:value={clip.on_screen_text}
-                      placeholder="TEXT OVERLAY"
-                      class="w-full px-2 py-1 bg-black border border-purple-950 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-400"
-                    />
+                    <label for={`scene-dialogue-${clip.clip_number}`} class="block swiss-tag text-slate-400 mb-1">
+                      Spoken Dialogue
+                    </label>
+                    <textarea
+                      id={`scene-dialogue-${clip.clip_number}`}
+                      bind:value={clip.spoken_dialogue}
+                      rows={2}
+                      placeholder="Spoken words..."
+                      class="w-full p-2 bg-black border border-purple-950 text-xs text-slate-200 font-mono focus:outline-none focus:border-amber-400"
+                    ></textarea>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <label for={`scene-visual-${clip.clip_number}`} class="block swiss-tag text-slate-500 mb-0.5">Visual Cues</label>
+                      <input
+                        id={`scene-visual-${clip.clip_number}`}
+                        type="text"
+                        bind:value={clip.visual_direction}
+                        placeholder="e.g. Punch-in zoom"
+                        class="w-full px-2 py-1 bg-black border border-purple-950 text-xs text-slate-300 font-mono focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label for={`scene-text-${clip.clip_number}`} class="block swiss-tag text-slate-500 mb-0.5">On-Screen Text</label>
+                      <input
+                        id={`scene-text-${clip.clip_number}`}
+                        type="text"
+                        bind:value={clip.on_screen_text}
+                        placeholder="TEXT OVERLAY"
+                        class="w-full px-2 py-1 bg-black border border-purple-950 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
     </div>
   {/if}
