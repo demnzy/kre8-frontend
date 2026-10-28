@@ -145,7 +145,7 @@
       target_duration_seconds: promptDuration,
       full_script: draft.autoGenerate
         ? `Drafting script with ${activeProviderName}...\n\nTopic: ${draft.topic}\nNiche: ${appState.preferences.primary_niche}\nFormat: ${promptFormat}\n\nCrafting hooks, dialogue, and camera scenes...`
-        : `Topic: ${draft.topic}\nFormat: ${promptFormat}\n\nClick "Generate Script with ${activeProviderName}" to draft dialogue and scene clips.`,
+        : '',
       generated_hooks: draft.hooks && draft.hooks.length > 0 ? draft.hooks : ['Generating high-retention hooks...'],
       generated_ctas: ['Follow for more creator insights!'],
       clips: [
@@ -570,7 +570,7 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2.5 shrink-0">
+      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
         <button
           onclick={copyTeleprompterText}
           class="flex items-center gap-1.5 px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-200 text-xs font-mono transition-all"
@@ -593,19 +593,41 @@
         </button>
 
         <button
-          onclick={() => (showPromptModal = true)}
-          class="flex items-center gap-2 px-4 py-2 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 text-xs font-mono font-bold tracking-wider transition-all"
+          onclick={() => {
+            if (activeScript?.title) {
+              generateLiveScript(
+                activeScript.title,
+                promptTone,
+                promptFormat,
+                promptDuration,
+                pendingCustomInstructions,
+                activeScript.content_item_id
+              );
+            } else {
+              showPromptModal = true;
+            }
+          }}
+          disabled={isGenerating}
+          class="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shadow-md"
         >
-          <Sparkles class="w-4 h-4 text-amber-400" />
-          <span>AI Generate</span>
+          <Sparkles class="w-4 h-4 text-black shrink-0 {isGenerating ? 'animate-spin' : ''}" />
+          <span>{isGenerating ? 'Generating...' : `Generate Script with ${activeProviderName}`}</span>
+        </button>
+
+        <button
+          onclick={() => (showPromptModal = true)}
+          class="px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-300 hover:text-white text-xs font-mono transition-all"
+          title="Open prompt parameters modal"
+        >
+          Options
         </button>
 
         <button
           onclick={handleSaveScript}
           disabled={isSavingScript}
-          class="flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50"
+          class="flex items-center gap-1.5 px-3.5 py-2 bg-purple-950/80 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono font-bold tracking-wider transition-all disabled:opacity-50"
         >
-          <Save class="w-4 h-4" />
+          <Save class="w-3.5 h-3.5" />
           <span>{isSavingScript ? 'Saving...' : 'Save Draft'}</span>
         </button>
       </div>
@@ -712,6 +734,39 @@
             </div>
           {/if}
 
+          {#if (!activeScript.full_script || activeScript.full_script.trim().length === 0 || activeScript.full_script.startsWith('[HOOK]\n\n[MAIN POINTS]') || activeScript.full_script.includes('Click "Generate Script') || (!activeScript.clips || activeScript.clips.length === 0)) && activeScript.title}
+            <div class="p-4 bg-black/80 border border-amber-400/40 space-y-2.5">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-2">
+                    <Sparkles class="w-4 h-4 text-amber-400 shrink-0" />
+                    <span class="text-xs font-bold text-white font-display">Draft Ready to Generate: "{activeScript.title}"</span>
+                  </div>
+                  <p class="text-[11px] text-slate-300 font-mono">
+                    Format: {promptFormat} • Target: ~{promptDuration}s • Persona: {activeCreator ? activeCreator.creator_name : 'Default'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onclick={() => generateLiveScript(
+                    activeScript.title,
+                    promptTone,
+                    promptFormat,
+                    promptDuration,
+                    pendingCustomInstructions,
+                    activeScript.content_item_id
+                  )}
+                  disabled={isGenerating}
+                  class="flex items-center justify-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shrink-0 shadow-md"
+                >
+                  <Sparkles class="w-3.5 h-3.5 text-black {isGenerating ? 'animate-spin' : ''}" />
+                  <span>{isGenerating ? 'Drafting...' : `Generate Script with ${activeProviderName}`}</span>
+                </button>
+              </div>
+            </div>
+          {/if}
+
           <div>
             <label for="script-editor-content" class="block swiss-tag text-slate-400 mb-1.5">Dialogue & Teleprompter Text</label>
             <textarea
@@ -752,14 +807,33 @@
               {/if}
             </div>
 
-            <button
-              onclick={handleBreakdownClips}
-              disabled={isBreakingDown}
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono disabled:opacity-50"
-            >
-              <Wand2 class="w-3.5 h-3.5" />
-              <span>{isBreakingDown ? 'Parsing...' : 'Re-sync Clips from Text'}</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick={() => generateLiveScript(
+                  activeScript.title,
+                  promptTone,
+                  promptFormat,
+                  promptDuration,
+                  pendingCustomInstructions,
+                  activeScript.content_item_id
+                )}
+                disabled={isGenerating}
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-mono font-bold transition-all disabled:opacity-50"
+              >
+                <Sparkles class="w-3.5 h-3.5 text-black {isGenerating ? 'animate-spin' : ''}" />
+                <span>{isGenerating ? 'Drafting...' : `Generate Script with ${activeProviderName}`}</span>
+              </button>
+
+              <button
+                onclick={handleBreakdownClips}
+                disabled={isBreakingDown}
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono disabled:opacity-50"
+              >
+                <Wand2 class="w-3.5 h-3.5" />
+                <span>{isBreakingDown ? 'Parsing...' : 'Re-sync Clips from Text'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
