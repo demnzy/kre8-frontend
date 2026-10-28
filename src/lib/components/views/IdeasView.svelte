@@ -560,6 +560,7 @@
             { id: 'hybrid', label: 'Hybrid (News + Creator)', icon: Sparkles },
             { id: 'topic', label: 'Custom Topic / Niche', icon: Lightbulb }
           ] as tab}
+            {@const Icon = tab.icon}
             <button
               type="button"
               onclick={() => (brainstormMode = tab.id as any)}
@@ -567,7 +568,6 @@
                 ? 'bg-amber-400 text-black font-bold border-amber-400'
                 : 'bg-black/60 text-slate-300 border-purple-900/60 hover:border-purple-600'}"
             >
-              {@const Icon = tab.icon}
               <Icon class="w-3.5 h-3.5" />
               <span>{tab.label}</span>
             </button>
