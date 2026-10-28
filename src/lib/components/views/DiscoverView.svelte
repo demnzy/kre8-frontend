@@ -20,7 +20,8 @@
     Search,
     Copy,
     Check,
-    Zap
+    Zap,
+    UserCheck
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import { getProviderInfo } from '../../utils/aiProviders';
@@ -37,8 +38,12 @@
   let isLoadingNews = $state(false);
   let isSynthesizing = $state(false);
   let synthesizingArticleId = $state<number | null>(null);
+  let selectedSynthesisCreatorId = $state<number | null>(null);
 
   let activeProvider = $derived(getProviderInfo(appState.preferences.ai_provider));
+  let selectedSynthesisCreator = $derived(
+    selectedSynthesisCreatorId ? (watchlist.find(w => w.id === selectedSynthesisCreatorId) || null) : null
+  );
 
   let availableSources = $derived.by(() => {
     const set = new Set<string>();
@@ -105,10 +110,11 @@
     try {
       isSynthesizing = true;
       if (articleId) synthesizingArticleId = articleId;
-      appState.showToast(`Synthesizing angles with ${activeProvider.name}...`, 'info');
-      aiIdeas = await api.synthesizeNewsToIdeas(articleId);
+      const voiceLabel = selectedSynthesisCreator ? ` in ${selectedSynthesisCreator.creator_name}'s voice` : '';
+      appState.showToast(`Synthesizing angles${voiceLabel} with ${activeProvider.name}...`, 'info');
+      aiIdeas = await api.synthesizeNewsToIdeas(articleId, selectedSynthesisCreatorId || undefined);
       newsArticles = await api.getDailyNews();
-      appState.showToast(`Synthesized content angles & hooks with ${activeProvider.name}!`, 'success');
+      appState.showToast(`Synthesized content angles & hooks${voiceLabel}!`, 'success');
     } catch (e: any) {
       appState.showToast(e.message || 'AI generation failed', 'error');
     } finally {
@@ -320,28 +326,9 @@
       creator_handle: creator.handle,
       creator_pacing: creator.pacing_style,
       creator_hooks: creator.signature_hooks,
-      autoGenerate: false
+      autoGenerate: true
     });
-    appState.showToast(`Loaded ${creator.creator_name}'s style profile into Script Studio!`, 'info');
-  }
-
-  async function handleDraftInspiredIdea(creator: CreatorWatchlist) {
-    try {
-      const idea = await api.createIdea({
-        title: `${creator.creator_name}-style Breakdown: ${appState.preferences.sub_niche || appState.preferences.primary_niche}`,
-        description: creator.personal_notes || `Inspired by ${creator.creator_name} (${creator.handle}) on ${creator.platform}.`,
-        intended_platform: creator.platform || 'YouTube',
-        category: appState.preferences.primary_niche,
-        priority: 'High',
-        tags: ['watchlist-inspired', creator.platform.toLowerCase()],
-        status: 'Active',
-        notes: creator.personal_notes ? `Creator Format Notes:\n${creator.personal_notes}` : undefined
-      });
-      appState.counts.ideas = (appState.counts.ideas || 0) + 1;
-      appState.showToast(`Saved inspired angle to Ideas Bank: "${idea.title}"`, 'success');
-    } catch (e: any) {
-      appState.showToast(e.message || 'Could not create idea', 'error');
-    }
+    appState.showToast(`Drafting script in ${creator.creator_name}'s style in Script Studio!`, 'info');
   }
 
   async function handleDeleteWatchlist(id: number) {
@@ -389,7 +376,26 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2.5 shrink-0">
+      <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+        {#if watchlist.length > 0}
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+            <UserCheck class="w-3.5 h-3.5 text-amber-400" />
+            <span class="text-slate-400">Voice:</span>
+            <select
+              value={selectedSynthesisCreatorId ?? ''}
+              onchange={(e) => (selectedSynthesisCreatorId = Number(e.currentTarget.value) || null)}
+              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="" class="bg-[#10071c] text-slate-300">Default (Direct & Sharp)</option>
+              {#each watchlist as creator}
+                <option value={creator.id} class="bg-[#10071c] text-amber-300">
+                  {creator.creator_name} ({creator.handle})
+                </option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         <button
           onclick={() => loadDailyNews(true)}
           disabled={isLoadingNews}
@@ -405,7 +411,13 @@
           class="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-extrabold tracking-wider transition-all font-display shadow-md disabled:opacity-50"
         >
           <Sparkles class="w-4 h-4" />
-          <span>{isSynthesizing && !synthesizingArticleId ? `Synthesizing with ${activeProvider.name}...` : `Synthesize with ${activeProvider.name}`}</span>
+          <span>
+            {isSynthesizing && !synthesizingArticleId
+              ? `Synthesizing with ${activeProvider.name}...`
+              : selectedSynthesisCreator
+              ? `Synthesize in ${selectedSynthesisCreator.creator_name}'s Voice`
+              : `Synthesize with ${activeProvider.name}`}
+          </span>
         </button>
       </div>
     </div>
@@ -587,11 +599,17 @@
 
                           <button
                             onclick={() => {
+                              const chosenCreator = selectedSynthesisCreator;
                               appState.openScriptStudioWithTopic({
                                 topic: angle.topic_angle,
                                 format: angle.recommended_format,
                                 hooks: angle.viral_hooks,
                                 talking_points: angle.talking_points,
+                                creator_watchlist_id: selectedSynthesisCreatorId || undefined,
+                                creator_name: chosenCreator?.creator_name,
+                                creator_handle: chosenCreator?.handle,
+                                creator_pacing: chosenCreator?.pacing_style,
+                                creator_hooks: chosenCreator?.signature_hooks,
                                 autoGenerate: true
                               });
                             }}
@@ -607,14 +625,26 @@
                 </div>
               {:else}
                 <div class="pt-3 border-t border-purple-900/40 flex items-center justify-between">
-                  <span class="text-xs text-slate-500 font-mono">No angles generated for this article yet.</span>
+                  <span class="text-xs text-slate-500 font-mono">
+                    {#if selectedSynthesisCreator}
+                      Voice: <span class="text-amber-400 font-bold">{selectedSynthesisCreator.creator_name}</span>
+                    {:else}
+                      No angles generated for this article yet.
+                    {/if}
+                  </span>
                   <button
                     onclick={() => handleSynthesizeAI(article.id)}
                     disabled={isSynthesizing}
                     class="text-xs font-mono tracking-wider text-amber-400 hover:text-amber-300 flex items-center gap-1.5 disabled:opacity-50"
                   >
                     <Sparkles class="w-3.5 h-3.5 {synthesizingArticleId === article.id ? 'animate-spin' : ''}" />
-                    <span>{synthesizingArticleId === article.id ? `Synthesizing with ${activeProvider.name}...` : `Synthesize with ${activeProvider.name}`}</span>
+                    <span>
+                      {synthesizingArticleId === article.id
+                        ? `Synthesizing with ${activeProvider.name}...`
+                        : selectedSynthesisCreator
+                        ? `Synthesize in ${selectedSynthesisCreator.creator_name}'s Voice`
+                        : `Synthesize with ${activeProvider.name}`}
+                    </span>
                   </button>
                 </div>
               {/if}
@@ -1091,38 +1121,26 @@
             </div>
 
             <!-- Card Actions -->
-            <div class="pt-3 border-t border-purple-900/40 flex flex-col gap-2">
-              <div class="flex items-center gap-2">
-                <button
-                  onclick={() => handleDraftInCreatorStyle(creator)}
-                  class="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all"
-                  title="Draft a script in this creator's pacing and hook style"
-                >
-                  <FileCode class="w-3.5 h-3.5 text-black" />
-                  <span>Draft in this Style</span>
-                </button>
-                <button
-                  onclick={() => handleDraftInspiredIdea(creator)}
-                  class="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono transition-colors"
-                  title="Save inspired angle to Ideas Bank"
-                >
-                  <Lightbulb class="w-3.5 h-3.5" />
-                  <span>Save Idea</span>
-                </button>
-              </div>
+            <div class="pt-3 border-t border-purple-900/40 flex items-center justify-between gap-3">
+              <button
+                onclick={() => handleDraftInCreatorStyle(creator)}
+                class="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all"
+                title="Draft a script in this creator's pacing and hook style"
+              >
+                <FileCode class="w-3.5 h-3.5 text-black" />
+                <span>Draft in this Style</span>
+              </button>
 
               {#if resolvedLink}
-                <div class="flex justify-end">
-                  <a
-                    href={resolvedLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="flex items-center gap-1 text-[11px] font-mono text-purple-400 hover:text-amber-300 transition-colors"
-                  >
-                    <span>Visit Profile</span>
-                    <ExternalLink class="w-3 h-3" />
-                  </a>
-                </div>
+                <a
+                  href={resolvedLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-1.5 px-3 py-2 bg-black hover:bg-purple-950 text-slate-300 border border-purple-900/60 text-xs font-mono transition-colors shrink-0"
+                >
+                  <span>Visit Profile</span>
+                  <ExternalLink class="w-3 h-3 text-amber-400" />
+                </a>
               {/if}
             </div>
           </div>

@@ -203,11 +203,16 @@ export const api = {
   // Daily News & AI Idea Pipeline
   getDailyNews: (forceRefresh = false) =>
     request<NewsArticle[]>(`/news/daily?force_refresh=${forceRefresh}`, { timeoutMs: 45_000, retries: 0 }),
-  synthesizeNewsToIdeas: (articleId?: number) =>
-    request<NewsAIIdea[]>(`/news/synthesize${articleId ? `?article_id=${articleId}` : ''}`, {
+  synthesizeNewsToIdeas: (articleId?: number, creatorId?: number) => {
+    const params = new URLSearchParams();
+    if (articleId) params.append('article_id', String(articleId));
+    if (creatorId) params.append('creator_id', String(creatorId));
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<NewsAIIdea[]>(`/news/synthesize${qs}`, {
       method: 'POST',
       timeoutMs: AI_TIMEOUT_MS
-    }),
+    });
+  },
   saveNewsAngleToIdeas: (angleId: number) =>
     request<ContentIdea>(`/news/save-angle-as-idea/${angleId}`, { method: 'POST' }),
 

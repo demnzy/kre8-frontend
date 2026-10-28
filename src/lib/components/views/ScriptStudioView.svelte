@@ -143,7 +143,9 @@
       title: draft.topic,
       tone: promptTone,
       target_duration_seconds: promptDuration,
-      full_script: `Drafting script with ${activeProviderName}...\n\nTopic: ${draft.topic}\nNiche: ${appState.preferences.primary_niche}\nFormat: ${promptFormat}\n\nCrafting hooks, dialogue, and camera scenes...`,
+      full_script: draft.autoGenerate
+        ? `Drafting script with ${activeProviderName}...\n\nTopic: ${draft.topic}\nNiche: ${appState.preferences.primary_niche}\nFormat: ${promptFormat}\n\nCrafting hooks, dialogue, and camera scenes...`
+        : `Topic: ${draft.topic}\nFormat: ${promptFormat}\n\nClick "Generate Script with ${activeProviderName}" to draft dialogue and scene clips.`,
       generated_hooks: draft.hooks && draft.hooks.length > 0 ? draft.hooks : ['Generating high-retention hooks...'],
       generated_ctas: ['Follow for more creator insights!'],
       clips: [
