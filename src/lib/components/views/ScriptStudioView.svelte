@@ -81,7 +81,6 @@
     return false;
   });
 
-  let showPromptModal = $state(false);
   let promptTopic = $state('');
   let promptTone = $state('Conversational & Punchy');
   let promptFormat = $state('Short Video');
@@ -327,7 +326,6 @@
       scripts = [saved, ...scripts.filter(s => s.id !== saved.id)];
       activeScript = saved;
       appState.counts.scripts = scripts.length;
-      showPromptModal = false;
       promptTopic = saved.title || topic;
       promptTone = tone;
       promptFormat = format;
@@ -341,17 +339,6 @@
     } finally {
       isGenerating = false;
     }
-  }
-
-  function openPromptOptions() {
-    if (activeScript) {
-      if (activeScript.title && activeScript.title !== 'Untitled Script') {
-        promptTopic = activeScript.title;
-      }
-      if (activeScript.tone) promptTone = activeScript.tone;
-      if (activeScript.target_duration_seconds) promptDuration = activeScript.target_duration_seconds;
-    }
-    showPromptModal = true;
   }
 
   async function loadScripts() {
@@ -495,12 +482,6 @@
     activeScript?.clips ? activeScript.clips.reduce((sum, c) => sum + (c.estimated_duration || 0), 0) : 0
   );
 
-  async function handleAIGenerateScript(e: Event) {
-    e.preventDefault();
-    if (!promptTopic.trim()) return;
-    await generateLiveScript(promptTopic, promptTone, promptFormat, promptDuration);
-  }
-
   async function handleBreakdownClips() {
     if (!activeScript?.full_script) return;
     if (!appState.requireApiKey()) return;
@@ -609,13 +590,27 @@
           {/if}
         </button>
 
-        <button
-          onclick={handleStartBlankScript}
-          class="flex items-center gap-1.5 px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-200 text-xs font-mono transition-all"
-        >
-          <Plus class="w-3.5 h-3.5 text-amber-400" />
-          <span>Blank Draft</span>
-        </button>
+        <!-- Video Type Dropdown -->
+        <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+          <Film class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span class="text-slate-400 shrink-0">Type:</span>
+          <select
+            bind:value={promptFormat}
+            onchange={(e) => {
+              const val = e.currentTarget.value;
+              promptFormat = val;
+              if (val === 'Short Video') promptDuration = 60;
+              else if (val === 'YouTube Long') promptDuration = 240;
+              else if (val === 'LinkedIn Post') promptDuration = 90;
+              if (activeScript) activeScript.target_duration_seconds = promptDuration;
+            }}
+            class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[160px] truncate"
+          >
+            <option value="Short Video" class="bg-[#10071c] text-amber-300">Short Video (60s)</option>
+            <option value="YouTube Long" class="bg-[#10071c] text-amber-300">YouTube Long (3-5m)</option>
+            <option value="LinkedIn Post" class="bg-[#10071c] text-amber-300">LinkedIn Video</option>
+          </select>
+        </div>
 
         {#if watchlistCreators.length > 0}
           <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
@@ -641,32 +636,21 @@
 
         <button
           onclick={() => {
-            if (activeScript?.title) {
-              generateLiveScript(
-                activeScript.title,
-                promptTone,
-                promptFormat,
-                promptDuration,
-                pendingCustomInstructions,
-                activeScript.content_item_id
-              );
-            } else {
-              openPromptOptions();
-            }
+            const topic = activeScript?.title || promptTopic || 'New Video Script';
+            generateLiveScript(
+              topic,
+              promptTone,
+              promptFormat,
+              promptDuration,
+              pendingCustomInstructions,
+              activeScript?.content_item_id
+            );
           }}
           disabled={isGenerating}
           class="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shadow-md"
         >
           <Sparkles class="w-4 h-4 text-black shrink-0 {isGenerating ? 'animate-spin' : ''}" />
           <span>{isGenerating ? 'Generating...' : `Generate Script with ${activeProviderName}`}</span>
-        </button>
-
-        <button
-          onclick={openPromptOptions}
-          class="px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-300 hover:text-white text-xs font-mono transition-all"
-          title="Open prompt parameters modal"
-        >
-          Options
         </button>
 
         <button
@@ -1232,117 +1216,6 @@
             {/each}
           </div>
         {/if}
-      </div>
-    </div>
-  {/if}
-
-  <!-- Prompt Modal -->
-  {#if showPromptModal}
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div class="relative w-full max-w-lg swiss-card border border-purple-800 bg-[#10071c] p-6 space-y-4">
-        <div class="flex items-center gap-2 border-b border-purple-900/40 pb-3">
-          <Sparkles class="w-4 h-4 text-amber-400" />
-          <h3 class="text-base font-bold text-white font-display">Generate Script</h3>
-        </div>
-
-        <form onsubmit={handleAIGenerateScript} class="space-y-4">
-          <div>
-            <label for="script-modal-topic" class="block swiss-tag text-slate-400 mb-1">Topic / Core Question</label>
-            <input
-              id="script-modal-topic"
-              type="text"
-              bind:value={promptTopic}
-              placeholder="e.g. Why developers are adopting autonomous agents in 2026"
-              required
-              class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label for="script-modal-format" class="block swiss-tag text-slate-400 mb-1">Format</label>
-              <select
-                id="script-modal-format"
-                bind:value={promptFormat}
-                class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
-              >
-                <option value="Short Video">Short Video (60s)</option>
-                <option value="YouTube Long">YouTube Long (3-5 min)</option>
-                <option value="LinkedIn Post">LinkedIn Video</option>
-              </select>
-            </div>
-
-            <div>
-              <label for="script-modal-tone" class="block swiss-tag text-slate-400 mb-1">Tone</label>
-              <select
-                id="script-modal-tone"
-                bind:value={promptTone}
-                class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
-              >
-                <option value="Conversational & Punchy">Conversational & Punchy</option>
-                <option value="Technical & Analytical">Technical & Analytical</option>
-                <option value="Story-Driven & Energetic">Story-Driven & Energetic</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label for="script-modal-creator" class="block swiss-tag text-slate-400">Creator Persona / Watchlist Voice</label>
-              <button
-                type="button"
-                onclick={() => appState.setModule('discover')}
-                class="text-[10px] font-mono text-amber-400 hover:text-amber-300"
-              >
-                + Manage Watchlist
-              </button>
-            </div>
-            <select
-              id="script-modal-creator"
-              value={selectedCreatorId ?? ''}
-              onchange={(e) => {
-                const val = e.currentTarget.value;
-                selectedCreatorId = val ? Number(val) : null;
-              }}
-              class="w-full px-3 py-2 bg-black border border-purple-900 text-white text-xs font-mono"
-            >
-              <option value="">Default Voice (No creator emulation)</option>
-              {#each watchlistCreators as creator}
-                <option value={creator.id}>
-                  {creator.creator_name} ({creator.handle}) {creator.pacing_style ? `— ${creator.pacing_style}` : ''}
-                </option>
-              {/each}
-            </select>
-            {#if activeCreator}
-              <div class="p-2.5 mt-2 bg-amber-400/10 border border-amber-400/20 text-xs font-mono text-amber-300 space-y-1">
-                <div class="flex items-center gap-1.5 font-bold">
-                  <Zap class="w-3.5 h-3.5 text-amber-400" />
-                  <span>Emulating {activeCreator.creator_name}</span>
-                </div>
-                {#if activeCreator.pacing_style}
-                  <p class="text-[11px] text-slate-300">Pacing: {activeCreator.pacing_style}</p>
-                {/if}
-              </div>
-            {/if}
-          </div>
-
-          <div class="flex justify-end gap-2 pt-3 border-t border-purple-900/40">
-            <button
-              type="button"
-              onclick={() => (showPromptModal = false)}
-              class="px-4 py-2 text-xs text-slate-400 hover:text-white font-mono"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isGenerating}
-              class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display disabled:opacity-50"
-            >
-              {isGenerating ? 'Generating...' : 'Generate Script'}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   {/if}
