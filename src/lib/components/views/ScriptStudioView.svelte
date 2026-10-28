@@ -187,8 +187,8 @@
   }
 
   async function handleReviseScript(customPrompt?: string) {
-    const instruction = (customPrompt || revisionInput).trim();
-    if (!instruction || !activeScript?.full_script || isRevising) return;
+    const rawInstruction = (customPrompt || revisionInput).trim();
+    if (!rawInstruction || !activeScript?.full_script || isRevising) return;
     if (!appState.requireApiKey()) return;
 
     try {
@@ -196,17 +196,21 @@
       const userMsgTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       revisionLog = [
         ...revisionLog,
-        { role: 'user', text: instruction, timestamp: userMsgTime }
+        { role: 'user', text: rawInstruction, timestamp: userMsgTime }
       ];
       revisionInput = '';
 
       appState.showToast(`Revising script with ${activeProviderName}...`, 'info');
 
+      const fullInstruction = activeCreator
+        ? `[Creator Voice: ${activeCreator.creator_name} | Style: ${activeCreator.pacing_style || 'Punchy & Direct'}]\n${rawInstruction}`
+        : rawInstruction;
+
       const res = await api.reviseScript({
         script_id: activeScript.id || undefined,
         current_script: activeScript.full_script,
         current_clips: activeScript.clips || [],
-        instruction: instruction,
+        instruction: fullInstruction,
         target_duration_seconds: activeScript.target_duration_seconds
       });
 
@@ -324,7 +328,10 @@
       activeScript = saved;
       appState.counts.scripts = scripts.length;
       showPromptModal = false;
-      promptTopic = '';
+      promptTopic = saved.title || topic;
+      promptTone = tone;
+      promptFormat = format;
+      promptDuration = duration;
       pendingCustomInstructions = undefined;
       appState.showToast(`Script generated: "${saved.title}"!`, 'success');
     } catch (e: any) {
@@ -334,6 +341,17 @@
     } finally {
       isGenerating = false;
     }
+  }
+
+  function openPromptOptions() {
+    if (activeScript) {
+      if (activeScript.title && activeScript.title !== 'Untitled Script') {
+        promptTopic = activeScript.title;
+      }
+      if (activeScript.tone) promptTone = activeScript.tone;
+      if (activeScript.target_duration_seconds) promptDuration = activeScript.target_duration_seconds;
+    }
+    showPromptModal = true;
   }
 
   async function loadScripts() {
@@ -389,6 +407,9 @@
 
   function selectSavedScript(script: Script) {
     activeScript = script;
+    promptTopic = script.title || '';
+    if (script.tone) promptTone = script.tone;
+    if (script.target_duration_seconds) promptDuration = script.target_duration_seconds;
     revisionLog = [];
     seedInitialVersionIfNeeded(activeScript);
   }
@@ -407,6 +428,10 @@
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+    promptTopic = '';
+    promptTone = 'Conversational & Punchy';
+    promptDuration = 60;
+    selectedCreatorId = null;
     revisionLog = [];
     activeVersionNumber = null;
   }
@@ -592,6 +617,28 @@
           <span>Blank Draft</span>
         </button>
 
+        {#if watchlistCreators.length > 0}
+          <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+            <Users class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span class="text-slate-400 shrink-0">Voice:</span>
+            <select
+              value={selectedCreatorId ?? ''}
+              onchange={(e) => {
+                const val = e.currentTarget.value;
+                selectedCreatorId = val ? Number(val) : null;
+              }}
+              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[170px] truncate"
+            >
+              <option value="" class="bg-[#10071c] text-slate-300">Default Voice</option>
+              {#each watchlistCreators as creator}
+                <option value={creator.id} class="bg-[#10071c] text-amber-300">
+                  {creator.creator_name} ({creator.handle})
+                </option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         <button
           onclick={() => {
             if (activeScript?.title) {
@@ -604,7 +651,7 @@
                 activeScript.content_item_id
               );
             } else {
-              showPromptModal = true;
+              openPromptOptions();
             }
           }}
           disabled={isGenerating}
@@ -615,7 +662,7 @@
         </button>
 
         <button
-          onclick={() => (showPromptModal = true)}
+          onclick={openPromptOptions}
           class="px-3 py-2 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-300 hover:text-white text-xs font-mono transition-all"
           title="Open prompt parameters modal"
         >
@@ -693,22 +740,47 @@
             </span>
           </div>
 
-          {#if activeCreator}
-            <div class="flex items-center justify-between p-2.5 bg-purple-950/40 border border-purple-800 text-xs font-mono">
+          {#if watchlistCreators.length > 0}
+            <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-purple-950/30 border border-purple-900/60 text-xs font-mono">
               <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                <span class="text-amber-400 font-bold">Emulating {activeCreator.creator_name} ({activeCreator.handle})</span>
-                {#if activeCreator.pacing_style}
-                  <span class="text-slate-400 hidden sm:inline">• {activeCreator.pacing_style}</span>
+                <Users class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span class="text-slate-400 shrink-0">Creator Voice:</span>
+                <select
+                  value={selectedCreatorId ?? ''}
+                  onchange={(e) => {
+                    const val = e.currentTarget.value;
+                    selectedCreatorId = val ? Number(val) : null;
+                  }}
+                  class="bg-black px-2 py-1 border border-purple-900 text-amber-300 text-xs font-mono focus:outline-none focus:border-amber-400 cursor-pointer max-w-[180px] sm:max-w-[240px] truncate"
+                >
+                  <option value="" class="text-slate-400">Default (Direct & Sharp)</option>
+                  {#each watchlistCreators as creator}
+                    <option value={creator.id} class="text-amber-300">
+                      {creator.creator_name} ({creator.handle})
+                    </option>
+                  {/each}
+                </select>
+                {#if activeCreator}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
                 {/if}
               </div>
-              <button
-                type="button"
-                onclick={() => (selectedCreatorId = null)}
-                class="text-[10px] text-slate-400 hover:text-white underline"
-              >
-                Clear Persona
-              </button>
+
+              {#if activeCreator}
+                <div class="flex items-center gap-2 text-[11px] text-slate-400">
+                  {#if activeCreator.pacing_style}
+                    <span class="hidden md:inline text-purple-300 italic truncate max-w-[220px]">
+                      {activeCreator.pacing_style}
+                    </span>
+                  {/if}
+                  <button
+                    type="button"
+                    onclick={() => (selectedCreatorId = null)}
+                    class="text-[10px] text-slate-400 hover:text-white underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              {/if}
             </div>
           {/if}
 
@@ -846,19 +918,43 @@
               <span class="swiss-tag text-[9px] text-purple-400 font-mono">Interactive</span>
             </div>
 
-            <!-- Active Engine Pill & Link to Settings -->
-            <button
-              type="button"
-              onclick={() => appState.setModule('settings')}
-              class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-900/60 hover:border-amber-400/50 text-[10px] font-mono text-slate-300 hover:text-amber-300 transition-all self-start sm:self-auto"
-              title="Click to configure AI providers and custom API keys in Settings"
-            >
-              <span class="w-1.5 h-1.5 rounded-full {hasCustomApiKey ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
-              <span class="font-bold text-slate-200">{activeProviderName}</span>
-              <span class="text-purple-600">/</span>
-              <span class="text-slate-400 truncate max-w-[100px]">{appState.preferences.ai_model || 'default'}</span>
-              <Settings class="w-3 h-3 text-slate-500 ml-0.5" />
-            </button>
+            <div class="flex flex-wrap items-center gap-2">
+              {#if watchlistCreators.length > 0}
+                <div class="flex items-center gap-1.5 px-2 py-1 bg-black border border-purple-900/70 text-[10px] font-mono">
+                  <span class="text-slate-400">Voice:</span>
+                  <select
+                    value={selectedCreatorId ?? ''}
+                    onchange={(e) => {
+                      const val = e.currentTarget.value;
+                      selectedCreatorId = val ? Number(val) : null;
+                    }}
+                    class="bg-transparent text-amber-300 font-mono text-[10px] focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[140px] truncate"
+                    title="Persona voice used for conversational AI script revisions"
+                  >
+                    <option value="" class="bg-[#10071c] text-slate-300">Default</option>
+                    {#each watchlistCreators as creator}
+                      <option value={creator.id} class="bg-[#10071c] text-amber-300">
+                        {creator.creator_name}
+                      </option>
+                    {/each}
+                  </select>
+                </div>
+              {/if}
+
+              <!-- Active Engine Pill & Link to Settings -->
+              <button
+                type="button"
+                onclick={() => appState.setModule('settings')}
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-900/60 hover:border-amber-400/50 text-[10px] font-mono text-slate-300 hover:text-amber-300 transition-all self-start sm:self-auto"
+                title="Click to configure AI providers and custom API keys in Settings"
+              >
+                <span class="w-1.5 h-1.5 rounded-full {hasCustomApiKey ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
+                <span class="font-bold text-slate-200">{activeProviderName}</span>
+                <span class="text-purple-600">/</span>
+                <span class="text-slate-400 truncate max-w-[80px]">{appState.preferences.ai_model || 'default'}</span>
+                <Settings class="w-3 h-3 text-slate-500 ml-0.5" />
+              </button>
+            </div>
           </div>
 
           <!-- Engine Status & API Key Prompt -->
