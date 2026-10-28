@@ -169,8 +169,8 @@
       </span>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+      <div class="min-w-0">
         <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
           Ideas Bank
         </h1>
@@ -179,7 +179,7 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 shrink-0">
         <button
           onclick={() => appState.setModule('discover')}
           class="flex items-center gap-1.5 px-3.5 py-2 bg-purple-950/60 hover:bg-purple-900/50 text-slate-300 hover:text-white border border-purple-800 text-xs font-mono transition-all"

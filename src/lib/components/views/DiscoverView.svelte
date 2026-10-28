@@ -360,31 +360,25 @@
       </span>
     </div>
 
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <div class="flex items-center gap-3">
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
-            Discover & Daily News
-          </h1>
-          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-[11px] font-mono">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            Live Feed Active
-          </span>
-        </div>
+    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 min-w-0">
+      <div class="min-w-0">
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white font-display">
+          Discover & Daily News
+        </h1>
         <p class="text-xs text-slate-300 mt-1">
           Real-time verified news tailored to your niche, ready for AI content angle synthesis.
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 min-w-0">
         {#if watchlist.length > 0}
-          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
-            <UserCheck class="w-3.5 h-3.5 text-amber-400" />
-            <span class="text-slate-400">Voice:</span>
+          <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-black border border-purple-900/60 text-xs font-mono max-w-full">
+            <UserCheck class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span class="text-slate-400 shrink-0">Voice:</span>
             <select
               value={selectedSynthesisCreatorId ?? ''}
               onchange={(e) => (selectedSynthesisCreatorId = Number(e.currentTarget.value) || null)}
-              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer"
+              class="bg-transparent text-amber-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
             >
               <option value="" class="bg-[#10071c] text-slate-300">Default (Direct & Sharp)</option>
               {#each watchlist as creator}
@@ -399,24 +393,24 @@
         <button
           onclick={() => loadDailyNews(true)}
           disabled={isLoadingNews}
-          class="flex items-center gap-1.5 px-3.5 py-2 bg-black hover:bg-purple-950 text-slate-300 border border-purple-900/60 text-xs font-mono tracking-wider transition-all disabled:opacity-50"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-black hover:bg-purple-950 text-slate-300 border border-purple-900/60 text-xs font-mono tracking-wider transition-all disabled:opacity-50 shrink-0"
         >
-          <RefreshCw class="w-3.5 h-3.5 text-amber-400 {isLoadingNews ? 'animate-spin' : ''}" />
-          <span>Refresh News</span>
+          <RefreshCw class="w-3.5 h-3.5 text-amber-400 {isLoadingNews ? 'animate-spin' : ''} shrink-0" />
+          <span>Refresh</span>
         </button>
 
         <button
           onclick={() => handleSynthesizeAI()}
           disabled={isSynthesizing}
-          class="flex items-center gap-2 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-extrabold tracking-wider transition-all font-display shadow-md disabled:opacity-50"
+          class="flex items-center gap-2 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold tracking-wider transition-all font-display shadow-md disabled:opacity-50 shrink-0"
         >
-          <Sparkles class="w-4 h-4" />
-          <span>
+          <Sparkles class="w-3.5 h-3.5 shrink-0" />
+          <span class="truncate">
             {isSynthesizing && !synthesizingArticleId
-              ? `Synthesizing with ${activeProvider.name}...`
+              ? 'Synthesizing...'
               : selectedSynthesisCreator
-              ? `Synthesize in ${selectedSynthesisCreator.creator_name}'s Voice`
-              : `Synthesize with ${activeProvider.name}`}
+              ? 'Synthesize in Voice'
+              : 'Synthesize Angles'}
           </span>
         </button>
       </div>
@@ -624,8 +618,8 @@
                   </div>
                 </div>
               {:else}
-                <div class="pt-3 border-t border-purple-900/40 flex items-center justify-between">
-                  <span class="text-xs text-slate-500 font-mono">
+                <div class="pt-3 border-t border-purple-900/40 flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-xs text-slate-500 font-mono truncate max-w-[240px]">
                     {#if selectedSynthesisCreator}
                       Voice: <span class="text-amber-400 font-bold">{selectedSynthesisCreator.creator_name}</span>
                     {:else}
@@ -635,15 +629,15 @@
                   <button
                     onclick={() => handleSynthesizeAI(article.id)}
                     disabled={isSynthesizing}
-                    class="text-xs font-mono tracking-wider text-amber-400 hover:text-amber-300 flex items-center gap-1.5 disabled:opacity-50"
+                    class="text-xs font-mono tracking-wider text-amber-400 hover:text-amber-300 flex items-center gap-1.5 disabled:opacity-50 shrink-0"
                   >
-                    <Sparkles class="w-3.5 h-3.5 {synthesizingArticleId === article.id ? 'animate-spin' : ''}" />
+                    <Sparkles class="w-3.5 h-3.5 {synthesizingArticleId === article.id ? 'animate-spin' : ''} shrink-0" />
                     <span>
                       {synthesizingArticleId === article.id
-                        ? `Synthesizing with ${activeProvider.name}...`
+                        ? 'Synthesizing...'
                         : selectedSynthesisCreator
-                        ? `Synthesize in ${selectedSynthesisCreator.creator_name}'s Voice`
-                        : `Synthesize with ${activeProvider.name}`}
+                        ? 'Synthesize in Voice'
+                        : 'Synthesize Angles'}
                     </span>
                   </button>
                 </div>
