@@ -162,7 +162,7 @@
     newCreatorUrl = '';
     newCreatorAvatar = '';
     newCreatorSubs = '';
-    newCreatorTopicNiche = appState.preferences.sub_niche || '';
+    newCreatorTopicNiche = '';
     newCreatorPacing = '';
     newCreatorHooks = [];
     newHookInput = '';
