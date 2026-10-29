@@ -420,15 +420,15 @@
             bind:value={prefs.news_region}
             class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400 cursor-pointer"
           >
-            <option value="GLOBAL">🌐 Global (Worldwide Headlines & Trends)</option>
-            <option value="NG">🇳🇬 Nigeria (West Africa, Startups, Creators & Tech)</option>
-            <option value="US">🇺🇸 United States (Silicon Valley, Media & Culture)</option>
-            <option value="UK">🇬🇧 United Kingdom (UK Media, Tech & Europe)</option>
-            <option value="CA">🇨🇦 Canada (Canadian Innovation & Startups)</option>
-            <option value="IN">🇮🇳 India (Creator Economy, AI & Venture)</option>
-            <option value="ZA">🇿🇦 South Africa (Southern African Media & Business)</option>
-            <option value="KE">🇰🇪 Kenya (East African Silicon Savannah)</option>
-            <option value="EU">🇪🇺 Europe (European Tech & AI Policy)</option>
+            <option value="GLOBAL">Global</option>
+            <option value="NG">Nigeria</option>
+            <option value="US">United States</option>
+            <option value="UK">United Kingdom</option>
+            <option value="CA">Canada</option>
+            <option value="IN">India</option>
+            <option value="ZA">South Africa</option>
+            <option value="KE">Kenya</option>
+            <option value="EU">Europe</option>
           </select>
           <span class="text-[10px] font-mono text-slate-500 mt-1 block">
             Sets the default regional feed in the Discover tab. You can also switch regions instantly on the fly.

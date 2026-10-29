@@ -156,10 +156,10 @@
     loadDailyNews(false);
   }
 
-  function formatRegionBadge(code?: string): string {
-    if (!code) return '🌐 Global';
+  function getRegionLabel(code?: string): string {
+    if (!code) return 'Global';
     const reg = availableRegions.find(r => r.code.toUpperCase() === code.toUpperCase());
-    return reg ? `${reg.flag} ${reg.label}` : code;
+    return reg ? reg.label : code;
   }
 
   async function handleSynthesizeAI(articleId?: number) {
@@ -414,7 +414,7 @@
         </span>
       </div>
       <span class="swiss-tag text-purple-400 font-mono">
-        NICHE: {appState.preferences.primary_niche} • {appState.preferences.sub_niche} • {currentRegionInfo.flag} {currentRegionInfo.code}
+        {appState.preferences.primary_niche} • {currentRegionInfo.label}
       </span>
     </div>
 
@@ -507,80 +507,85 @@
   <!-- TAB 1: DAILY NEWS & AI ANGLES -->
   {#if activeTab === 'news'}
     <div class="space-y-4">
-      <!-- Geographic Region & Localization Selector -->
-      <div class="bg-[#0b0513] p-3.5 border border-purple-900/60 space-y-2.5">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <Globe class="w-4 h-4 text-amber-400 shrink-0" />
-            <span class="text-xs font-mono font-bold text-white uppercase tracking-wider">Region Focus</span>
-            <span class="text-[11px] font-mono text-amber-300/90 hidden sm:inline">({currentRegionInfo.label} — {currentRegionInfo.description})</span>
-          </div>
-          <span class="text-[10px] font-mono text-purple-400">Localized RSS & Regional Wire</span>
-        </div>
-
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {#each availableRegions as reg}
-            <button
-              type="button"
-              onclick={() => handleSelectRegion(reg.code)}
-              class="px-2.5 py-1 text-xs font-mono transition-all flex items-center gap-1.5 shrink-0 rounded {selectedRegion.toUpperCase() === reg.code.toUpperCase()
-                ? 'bg-amber-400 text-black font-bold shadow-sm'
-                : 'bg-purple-950/40 text-slate-300 border border-purple-900/50 hover:text-white hover:border-purple-700'}"
-              title={reg.description}
+      <!-- Unified Decluttered News Toolbar -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#10071c] p-3 border border-purple-900/50">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Clean Region Dropdown (Human Country Names Only) -->
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+            <Globe class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <select
+              value={selectedRegion}
+              onchange={(e) => handleSelectRegion(e.currentTarget.value)}
+              class="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer"
+              aria-label="Filter news by country"
             >
-              <span>{reg.flag}</span>
-              <span>{reg.label}</span>
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Category Filter Pills Bar -->
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-        {#each categories as cat}
-          <button
-            type="button"
-            onclick={() => handleSelectCategory(cat.id)}
-            class="px-3 py-1 text-xs font-mono transition-all shrink-0 rounded {selectedCategory === cat.id
-              ? 'bg-purple-600 text-white font-bold'
-              : 'bg-[#10071c] text-slate-400 border border-purple-900/40 hover:text-slate-200'}"
-          >
-            {cat.label}
-          </button>
-        {/each}
-      </div>
-
-      {#if newsArticles.length > 0}
-        <!-- Filter & Search Bar for Expanded News Pool -->
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#0d0617] p-3 border border-purple-900/40">
-          <div class="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-            {#each availableSources as src}
-              <button
-                type="button"
-                onclick={() => (selectedSource = src)}
-                class="px-2.5 py-1 text-xs font-mono transition-all shrink-0 {selectedSource === src
-                  ? 'bg-amber-400 text-black font-bold'
-                  : 'text-slate-400 hover:text-white bg-black/60 border border-purple-900/50'}"
-              >
-                {src}
-              </button>
-            {/each}
+              {#each availableRegions as reg}
+                <option value={reg.code} class="bg-[#10071c] text-white">
+                  {reg.label}
+                </option>
+              {/each}
+            </select>
           </div>
 
-          <div class="w-full sm:w-64">
+          <!-- Clean Topic Dropdown -->
+          <div class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+            <SlidersHorizontal class="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <select
+              value={selectedCategory}
+              onchange={(e) => handleSelectCategory(e.currentTarget.value)}
+              class="bg-transparent text-white font-mono text-xs focus:outline-none cursor-pointer"
+              aria-label="Filter news by topic"
+            >
+              {#each categories as cat}
+                <option value={cat.id} class="bg-[#10071c] text-white">
+                  {cat.label}
+                </option>
+              {/each}
+            </select>
+          </div>
+
+          {#if availableSources.length > 2}
+            <div class="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900/60 text-xs font-mono">
+              <span class="text-slate-500 text-[11px]">Source:</span>
+              <select
+                value={selectedSource}
+                onchange={(e) => (selectedSource = e.currentTarget.value)}
+                class="bg-transparent text-slate-300 font-mono text-xs focus:outline-none cursor-pointer max-w-[130px] truncate"
+                aria-label="Filter news by source"
+              >
+                {#each availableSources as src}
+                  <option value={src} class="bg-[#10071c] text-white">{src}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1 sm:w-56">
+            <Search class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               bind:value={newsSearch}
-              placeholder="Filter headlines..."
-              class="w-full px-3 py-1.5 bg-black border border-purple-900/60 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              placeholder="Search stories..."
+              class="w-full pl-8 pr-3 py-1.5 bg-black border border-purple-900/60 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
           </div>
+
+          <button
+            onclick={() => loadDailyNews(true)}
+            disabled={isLoadingNews}
+            class="p-2 bg-black hover:bg-purple-950 text-slate-300 border border-purple-900/60 text-xs transition-all disabled:opacity-50 shrink-0"
+            title="Refresh stories"
+          >
+            <RefreshCw class="w-3.5 h-3.5 text-amber-400 {isLoadingNews ? 'animate-spin' : ''}" />
+          </button>
         </div>
-      {/if}
+      </div>
 
       {#if isLoadingNews}
         <div class="text-center py-16 text-slate-500 text-xs font-mono animate-pulse">
-          Ingesting latest daily news and headlines for {currentRegionInfo.label} • {appState.preferences.sub_niche}...
+          Ingesting latest verified stories for {currentRegionInfo.label}...
         </div>
       {:else if filteredNewsArticles.length === 0}
         <div class="text-center py-16 text-slate-500 text-xs font-mono">
@@ -589,9 +594,9 @@
             : 'No articles match your active filter.'}
         </div>
       {:else}
-        <div class="grid grid-cols-1 gap-5">
+        <div class="grid grid-cols-1 gap-4">
           {#each filteredNewsArticles as article, idx}
-            <div use:reveal={{ delay: Math.min(idx * 75, 400) }} class="swiss-card swiss-card-hover p-6 border border-purple-900/50 bg-[#10071c] hover:border-amber-400/40 transition-all space-y-4">
+            <div use:reveal={{ delay: Math.min(idx * 75, 400) }} class="swiss-card swiss-card-hover p-6 border border-purple-900/50 bg-[#10071c] hover:border-amber-400/40 transition-all space-y-3">
               <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 {#if article.image_url}
                   <img
@@ -604,22 +609,21 @@
                   />
                 {/if}
                 <div class="space-y-1.5 flex-1">
-                  <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
-                    <span class="px-2 py-0.5 bg-purple-950 text-amber-400 border border-purple-800 font-bold text-[10px]">
+                  <!-- Decluttered, Clean Metadata Line -->
+                  <div class="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
+                    <span class="text-amber-400 font-semibold text-[11px]">
                       {article.source_name || 'News Wire'}
                     </span>
-                    {#if article.region}
-                      <span class="px-2 py-0.5 bg-black text-amber-300 border border-purple-900/60 font-mono text-[10px]">
-                        {formatRegionBadge(article.region)}
-                      </span>
+                    <span class="text-slate-600">•</span>
+                    <span class="text-slate-400 text-[11px]">{formatNewsDate(article.published_date)}</span>
+                    {#if selectedRegion === 'GLOBAL' && article.region && article.region !== 'GLOBAL'}
+                      <span class="text-slate-600">•</span>
+                      <span class="text-slate-300 text-[11px]">{getRegionLabel(article.region)}</span>
                     {/if}
                     {#if article.category && article.category !== 'general'}
-                      <span class="px-2 py-0.5 bg-purple-900/30 text-purple-300 border border-purple-800/40 font-mono text-[10px] capitalize">
-                        {article.category}
-                      </span>
+                      <span class="text-slate-600">•</span>
+                      <span class="text-purple-300 text-[11px] capitalize">{article.category}</span>
                     {/if}
-                    <span class="text-slate-500">•</span>
-                    <span class="text-slate-300 font-bold text-[11px]">{formatNewsDate(article.published_date)}</span>
                   </div>
                   <h2 class="text-lg font-bold text-white hover:text-amber-300 transition-colors font-display">
                     <a href={article.source_url} target="_blank" rel="noopener noreferrer" class="flex items-center gap-2">
