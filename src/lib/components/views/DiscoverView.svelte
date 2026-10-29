@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import { resolveAvatarUrl, handleAvatarError } from '../../utils/avatar';
   import LoadError from '../layout/LoadError.svelte';
   import type { NewsArticle, NewsAIIdea, CreatorWatchlist } from '../../types';
   import {
@@ -788,10 +789,11 @@
                   <div class="flex items-center gap-3.5">
                     {#if newCreatorAvatar}
                       <img
-                        src={newCreatorAvatar}
+                        src={resolveAvatarUrl(newCreatorAvatar)}
                         alt={newCreatorName || 'Creator Avatar'}
+                        referrerpolicy="no-referrer"
+                        onerror={(e) => handleAvatarError(e, newCreatorName)}
                         class="w-12 h-12 rounded-full border border-purple-500 object-cover shrink-0"
-                        onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
                       />
                     {:else}
                       <div class="w-12 h-12 rounded-full bg-purple-900 border border-purple-700 flex items-center justify-center text-amber-300 font-bold font-display text-base shrink-0">
@@ -1010,10 +1012,11 @@
                 <div class="flex items-center gap-3">
                   {#if creator.avatar_url}
                     <img
-                      src={creator.avatar_url}
+                      src={resolveAvatarUrl(creator.avatar_url)}
                       alt={creator.creator_name}
+                      referrerpolicy="no-referrer"
+                      onerror={(e) => handleAvatarError(e, creator.creator_name)}
                       class="w-10 h-10 rounded-full border border-purple-600 object-cover shrink-0"
-                      onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
                     />
                   {:else}
                     <div class="w-10 h-10 rounded-full bg-purple-950 border border-purple-800 flex items-center justify-center text-amber-400 font-bold font-display text-sm shrink-0">

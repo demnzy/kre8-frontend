@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import { resolveAvatarUrl, handleAvatarError } from '../../utils/avatar';
   import LoadError from '../layout/LoadError.svelte';
   import type {
     AnalyticsSummary,
@@ -548,7 +549,13 @@
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
                   {#if account.avatar_url}
-                    <img src={account.avatar_url} alt={account.account_name} class="w-7 h-7 rounded-full border border-purple-700 object-cover shrink-0" />
+                    <img
+                      src={resolveAvatarUrl(account.avatar_url)}
+                      alt={account.account_name}
+                      referrerpolicy="no-referrer"
+                      onerror={(e) => handleAvatarError(e, account.account_name)}
+                      class="w-7 h-7 rounded-full border border-purple-700 object-cover shrink-0"
+                    />
                   {/if}
                   <div class="text-sm font-bold text-white font-display truncate">{account.account_name}</div>
                 </div>
@@ -624,8 +631,10 @@
           <div class="flex items-center gap-4">
             {#if currentDetail?.avatar_url || currentAcc?.avatar_url}
               <img
-                src={currentDetail?.avatar_url || currentAcc?.avatar_url}
+                src={resolveAvatarUrl(currentDetail?.avatar_url || currentAcc?.avatar_url)}
                 alt={currentDetail?.account_name || activeTab}
+                referrerpolicy="no-referrer"
+                onerror={(e) => handleAvatarError(e, currentDetail?.account_name || activeTab)}
                 class="w-14 h-14 rounded-full border-2 border-amber-400 object-cover shadow-lg shrink-0"
               />
             {:else}
