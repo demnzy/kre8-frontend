@@ -301,11 +301,10 @@
     const targetTop = containerRect.top + (containerRect.height * 0.35); // 35% eye line
     const diff = wordRect.top - targetTop;
 
-    if (Math.abs(diff) > 20) {
-      containerEl.scrollBy({
-        top: diff,
-        behavior: 'smooth'
-      });
+    if (Math.abs(diff) > 2) {
+      // Smooth continuous damping without CSS scroll animation jitter
+      const step = Math.sign(diff) * Math.min(Math.abs(diff) * 0.12, 12);
+      containerEl.scrollTop += step;
     }
   }
 
@@ -579,7 +578,7 @@
       <!-- Scrollable Text Area -->
       <div
         bind:this={containerEl}
-        class="w-full h-full overflow-y-auto px-8 sm:px-16 lg:px-24 py-36 scroll-smooth {isMirrored ? 'scale-x-[-1]' : ''}"
+        class="w-full h-full overflow-y-auto px-8 sm:px-16 lg:px-24 py-36 {isMirrored ? 'scale-x-[-1]' : ''}"
       >
         <div class="max-w-4xl mx-auto space-y-6">
           <!-- Spoken Dialogue Tokens -->

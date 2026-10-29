@@ -743,54 +743,17 @@
               placeholder="Script Title..."
               class="text-lg font-bold text-white bg-transparent border-none focus:outline-none w-full font-display tracking-tight"
             />
-            <span class="swiss-tag px-2 py-1 bg-black border border-purple-900 text-amber-400 shrink-0">
-              ~{estimatedDurationSec}s [{wordCount} words]
-            </span>
-          </div>
-
-          {#if watchlistCreators.length > 0}
-            <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-purple-950/30 border border-purple-900/60 text-xs font-mono">
-              <div class="flex items-center gap-2">
-                <Users class="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span class="text-slate-400 shrink-0">Creator Voice:</span>
-                <select
-                  value={selectedCreatorId ?? ''}
-                  onchange={(e) => {
-                    const val = e.currentTarget.value;
-                    selectedCreatorId = val ? Number(val) : null;
-                  }}
-                  class="bg-black px-2 py-1 border border-purple-900 text-amber-300 text-xs font-mono focus:outline-none focus:border-amber-400 cursor-pointer max-w-[180px] sm:max-w-[240px] truncate"
-                >
-                  <option value="" class="text-slate-400">Default (Direct & Sharp)</option>
-                  {#each watchlistCreators as creator}
-                    <option value={creator.id} class="text-amber-300">
-                      {creator.creator_name} ({creator.handle})
-                    </option>
-                  {/each}
-                </select>
-                {#if activeCreator}
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                {/if}
-              </div>
-
+            <div class="flex items-center gap-2 shrink-0">
               {#if activeCreator}
-                <div class="flex items-center gap-2 text-[11px] text-slate-400">
-                  {#if activeCreator.pacing_style}
-                    <span class="hidden md:inline text-purple-300 italic truncate max-w-[220px]">
-                      {activeCreator.pacing_style}
-                    </span>
-                  {/if}
-                  <button
-                    type="button"
-                    onclick={() => (selectedCreatorId = null)}
-                    class="text-[10px] text-slate-400 hover:text-white underline"
-                  >
-                    Clear
-                  </button>
-                </div>
+                <span class="swiss-tag px-2 py-1 bg-purple-950/70 border border-purple-800 text-purple-300 text-[10px] font-mono">
+                  Voice: {activeCreator.creator_name}
+                </span>
               {/if}
+              <span class="swiss-tag px-2 py-1 bg-black border border-purple-900 text-amber-400">
+                ~{estimatedDurationSec}s [{wordCount} words]
+              </span>
             </div>
-          {/if}
+          </div>
 
           <!-- Version History Bar -->
           {#if activeScript.versions && activeScript.versions.length > 0}
@@ -890,28 +853,13 @@
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                onclick={() => generateLiveScript(
-                  activeScript.title,
-                  promptTone,
-                  promptFormat,
-                  promptDuration,
-                  pendingCustomInstructions,
-                  activeScript.content_item_id
-                )}
-                disabled={isGenerating}
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-mono font-bold transition-all disabled:opacity-50"
-              >
-                <Sparkles class="w-3.5 h-3.5 text-black {isGenerating ? 'animate-spin' : ''}" />
-                <span>{isGenerating ? 'Drafting...' : `Generate Script with ${activeProviderName}`}</span>
-              </button>
-
-              <button
                 onclick={handleBreakdownClips}
                 disabled={isBreakingDown}
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono disabled:opacity-50"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono disabled:opacity-50 transition-colors"
+                title="Automatically partition dialogue into timed scene clips"
               >
-                <Wand2 class="w-3.5 h-3.5" />
-                <span>{isBreakingDown ? 'Parsing...' : 'Re-sync Clips from Text'}</span>
+                <Wand2 class="w-3.5 h-3.5 {isBreakingDown ? 'animate-spin' : ''}" />
+                <span>{isBreakingDown ? 'Parsing Scenes...' : 'Re-sync Scenes from Text'}</span>
               </button>
             </div>
           </div>
@@ -1148,33 +1096,36 @@
       <!-- Right Column: Scene Breakdown (5 cols) -->
       <div class="lg:col-span-5 flex flex-col h-full min-w-0">
         <div class="swiss-card p-5 border border-purple-900/60 bg-[#10071c] flex flex-col flex-1 h-full space-y-4">
-          <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
-            <div class="flex items-center gap-2">
-              <Film class="w-4 h-4 text-amber-400" />
-              <h2 class="font-bold text-sm text-white font-display">Scene Breakdown</h2>
-              <span class="text-[10px] font-mono text-purple-400">[{clipsDurationTotal}s total • {activeScript.clips?.length || 0} scenes]</span>
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <Film class="w-4 h-4 text-amber-400 shrink-0" />
+              <h2 class="font-bold text-sm text-white font-display shrink-0">Scenes</h2>
+              <span class="text-[11px] font-mono text-slate-400 truncate">
+                {clipsDurationTotal}s • {activeScript.clips?.length || 0} clips
+              </span>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
               <button
                 type="button"
                 onclick={() => {
                   teleprompterInitialSceneIndex = 0;
                   showTeleprompter = true;
                 }}
-                class="flex items-center gap-1 px-2 py-1 bg-amber-400 text-black font-bold text-xs font-mono hover:bg-amber-300 transition-colors shadow-sm"
-                title="Rehearse all scenes in Teleprompter play mode"
+                class="flex items-center gap-1 px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-black text-xs font-mono font-bold rounded transition-colors shadow-sm"
+                title="Play All Scenes in Teleprompter"
               >
                 <Play class="w-3 h-3 fill-black text-black" />
-                <span>Play All</span>
+                <span>Play</span>
               </button>
 
               <button
                 onclick={handleAddClip}
-                class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-800 text-slate-300 text-xs font-mono hover:text-white hover:border-amber-400/50 transition-colors"
+                class="flex items-center gap-1 px-2.5 py-1 bg-black border border-purple-800 text-slate-300 hover:text-white hover:border-amber-400/50 text-xs font-mono rounded transition-colors"
+                title="Add Scene"
               >
                 <Plus class="w-3.5 h-3.5 text-amber-400" />
-                <span>Add Scene</span>
+                <span>Add</span>
               </button>
             </div>
           </div>
