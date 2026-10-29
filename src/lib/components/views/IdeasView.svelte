@@ -50,6 +50,27 @@
     }
   }
 
+  function cleanNotesForEditing(rawNotes: string | undefined, description: string | undefined): string {
+    if (!rawNotes) return '';
+    let notes = rawNotes.trim();
+
+    // 1. Remove "Why it matters:\n...\n\n" prefix
+    notes = notes.replace(/^Why it matters:\s*[\s\S]*?(?=\n\n(?:Viral Hooks|Hook Formulas|Talking Points|Pacing & Style|Hooks):|\n\n[•\-]|$)/i, '').trim();
+
+    // 2. If notes starts with "Why it matters:\n<something>" followed by linebreaks
+    notes = notes.replace(/^Why it matters:\s*[^\n]+(?:\r?\n)+/i, '').trim();
+
+    // 3. If description is known, and notes still starts with that exact description text
+    if (description && description.trim()) {
+      const trimmedDesc = description.trim();
+      if (notes.startsWith(trimmedDesc)) {
+        notes = notes.slice(trimmedDesc.length).replace(/^[\r\n\s]+/, '').trim();
+      }
+    }
+
+    return notes;
+  }
+
   function openCreateModal() {
     editingIdea = null;
     formTitle = '';
@@ -65,7 +86,7 @@
     editingIdea = idea;
     formTitle = idea.title;
     formDescription = idea.description || '';
-    formNotes = idea.notes || '';
+    formNotes = cleanNotesForEditing(idea.notes, idea.description);
     formPlatform = idea.intended_platform || 'YouTube';
     formPriority = idea.priority || 'Medium';
     formTags = (idea.tags || []).join(', ');
@@ -299,7 +320,11 @@
 
             <button
               onclick={() => {
-                const combinedNotes = [idea.description, idea.notes].filter(Boolean).join('\n\n');
+                const cleanedNotes = cleanNotesForEditing(idea.notes, idea.description);
+                const instructionsList: string[] = [];
+                if (idea.description?.trim()) instructionsList.push(`Angle:\n${idea.description.trim()}`);
+                if (cleanedNotes) instructionsList.push(cleanedNotes);
+                const combinedNotes = instructionsList.join('\n\n');
                 appState.openScriptStudioWithTopic({
                   topic: idea.title,
                   format: 'Short Video',
