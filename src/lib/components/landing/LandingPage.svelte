@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appState } from "../../stores/appState.svelte";
   import Kre8Logo from "../ui/Kre8Logo.svelte";
+  import AnimatedKre8Logo from "../ui/AnimatedKre8Logo.svelte";
   import {
     Sparkles,
     Radio,
@@ -321,21 +322,28 @@
         </span>
       </div>
 
-      <div class="space-y-4 max-w-4xl">
-        <h1
-          class="text-4xl sm:text-6xl font-bold tracking-tight text-white leading-[1.05]"
-        >
-          Turn breaking news and raw ideas into <span class="text-amber-400"
-            >ready-to-film</span
-          > scripts.
-        </h1>
-        <p
-          class="text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed pt-1"
-        >
-          Kre8 connects your daily niche news feed, creator voice modeling, AI
-          scriptwriting studio, timed scene shot lists, and channel telemetry
-          into one calm, unified workspace.
-        </p>
+      <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8 lg:gap-12">
+        <div class="space-y-4 max-w-3xl">
+          <h1
+            class="text-4xl sm:text-6xl font-bold tracking-tight text-white leading-[1.05]"
+          >
+            Turn breaking news and raw ideas into <span class="text-amber-400"
+              >ready-to-film</span
+            > scripts.
+          </h1>
+          <p
+            class="text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed pt-1"
+          >
+            Kre8 connects your daily niche news feed, creator voice modeling, AI
+            scriptwriting studio, timed scene shot lists, and channel telemetry
+            into one calm, unified workspace.
+          </p>
+        </div>
+
+        <!-- Animated Kre8 Vector Mark (hand-drawn calligraphy animation, no container box) -->
+        <div class="shrink-0 flex items-center justify-center self-center lg:self-auto py-2">
+          <AnimatedKre8Logo size={210} class="scale-90 sm:scale-100" />
+        </div>
       </div>
 
       <div
