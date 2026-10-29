@@ -36,7 +36,7 @@
   import { getProviderInfo } from '../../utils/aiProviders';
   import { formatNewsDate } from '../../utils/formatDate';
 
-  type AnalyticsTab = 'all' | 'youtube' | 'x' | 'tiktok' | 'linkedin' | 'instagram';
+  type AnalyticsTab = 'all' | 'youtube' | 'x' | 'tiktok' | 'instagram';
   let activeTab = $state<AnalyticsTab>('all');
 
   let activeProvider = $derived(getProviderInfo(appState.preferences.ai_provider));
@@ -161,15 +161,23 @@
     showModal = true;
   }
 
-  async function handleYouTubeLookup() {
+  async function handleUniversalLookup() {
     if (!channelHandle.trim()) {
-      lookupMessage = 'Please enter a YouTube handle (e.g. @mkbhd or @fireship)';
+      lookupMessage = `Please enter a ${selectedPlatform.toUpperCase()} handle or channel URL`;
       return;
     }
     try {
       isLookingUp = true;
-      lookupMessage = 'Inspecting public YouTube channel and live video telemetry...';
-      const res = await api.lookupYouTubeHandle(channelHandle);
+      const platLabel = selectedPlatform === 'youtube'
+        ? 'YouTube'
+        : selectedPlatform === 'x'
+        ? 'X / Twitter'
+        : selectedPlatform === 'tiktok'
+        ? 'TikTok'
+        : 'Instagram';
+      lookupMessage = `Inspecting ${platLabel}...`;
+
+      const res = await api.lookupPlatformHandle(selectedPlatform, channelHandle);
       if (res && res.success) {
         channelHandle = res.handle || channelHandle;
         channelFollowers = res.followers || 0;
@@ -178,12 +186,19 @@
         channelTotalVideos = res.total_videos || 0;
         channelEngagement = res.avg_engagement || 3.5;
         inspectedRecentVideos = res.recent_videos || [];
-        lookupMessage = `Found ${res.channel_title}${res.subscribers_text ? ` (${res.subscribers_text})` : ''} • ${res.total_videos || 0} uploads • Ingested ${inspectedRecentVideos.length} recent uploads with live views`;
+
+        if (res.raw_metrics) {
+          if (res.raw_metrics.total_likes !== undefined) channelTotalLikes = res.raw_metrics.total_likes;
+          if (res.raw_metrics.following !== undefined) channelFollowing = res.raw_metrics.following;
+          if (res.raw_metrics.posts_count !== undefined) channelPostsCount = res.raw_metrics.posts_count;
+        }
+
+        lookupMessage = `Found ${res.channel_title}${res.subscribers_text ? ` (${res.subscribers_text})` : ''} • ${res.followers.toLocaleString()} followers • ${inspectedRecentVideos.length} recent posts/videos with live telemetry`;
       } else {
-        lookupMessage = res?.message || 'Could not auto-fetch channel. You can manually enter your metrics below.';
+        lookupMessage = res?.message || `Could not auto-fetch ${platLabel}. You can manually enter your metrics below.`;
       }
     } catch (e: any) {
-      lookupMessage = 'Could not fetch public stats. You can manually enter your metrics below.';
+      lookupMessage = e?.message || 'Could not fetch public stats. You can manually enter your metrics below.';
     } finally {
       isLookingUp = false;
     }
@@ -382,7 +397,7 @@
         All Channels
       </button>
 
-      {#each ['youtube', 'x', 'tiktok', 'linkedin', 'instagram'] as plat}
+      {#each ['youtube', 'x', 'tiktok', 'instagram'] as plat}
         {@const isConnected = accounts.some(a => a.platform.toLowerCase() === plat && a.is_connected)}
         <button
           onclick={() => switchTab(plat as AnalyticsTab)}
@@ -510,7 +525,7 @@
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {#each ['youtube', 'x', 'tiktok', 'linkedin', 'instagram'] as p}
+        {#each ['youtube', 'x', 'tiktok', 'instagram'] as p}
           {@const account = accounts.find(acc => acc.platform.toLowerCase() === p && acc.is_connected)}
           {@const pStats = summary.platforms.find(acc => acc.platform.toLowerCase() === p)}
           <div class="p-4 bg-black/60 border border-purple-950 flex flex-col justify-between space-y-4 hover:border-purple-800 transition-colors">
@@ -597,7 +612,7 @@
     </div>
   {/if}
 
-  <!-- TAB 2: SPECIFIC PLATFORM TELEMETRY (YOUTUBE / X / TIKTOK / LINKEDIN / IG) -->
+  <!-- TAB 2: SPECIFIC PLATFORM TELEMETRY (YOUTUBE / X / TIKTOK / INSTAGRAM) -->
   {#if activeTab !== 'all'}
     {@const currentDetail = channelDetails[activeTab]}
     {@const currentAcc = accounts.find(a => a.platform.toLowerCase() === activeTab && a.is_connected)}
@@ -679,7 +694,7 @@
         <div class="swiss-card p-5 border border-purple-900/50 bg-[#10071c]">
           <div class="flex items-center justify-between text-slate-400 mb-2">
             <span class="swiss-tag text-slate-400">
-              {activeTab === 'youtube' ? 'Subscribers' : activeTab === 'linkedin' ? 'Connections / Followers' : 'Followers'}
+              {activeTab === 'youtube' ? 'Subscribers' : 'Followers'}
             </span>
             <Users class="w-4 h-4 text-amber-400" />
           </div>
@@ -952,36 +967,46 @@
           </div>
         </div>
 
-        <!-- Handle input & Live YouTube Lookup -->
+        <!-- Handle input & Universal Live Lookup -->
         <div>
           <label for="channel-handle-input" class="block text-slate-400 text-[10px] mb-1">
-            {selectedPlatform === 'youtube' ? 'YouTube Channel Handle or URL' : 'Account Handle or Page Name'}
+            {selectedPlatform === 'youtube'
+              ? 'YouTube Channel Handle or URL'
+              : selectedPlatform === 'x'
+              ? 'X / Twitter Handle or Profile URL'
+              : selectedPlatform === 'tiktok'
+              ? 'TikTok Username or Profile URL'
+              : 'Instagram Username or Profile URL'}
           </label>
           <div class="flex items-center gap-2">
             <input
               id="channel-handle-input"
               type="text"
               bind:value={channelHandle}
-              placeholder={selectedPlatform === 'youtube' ? '@mkbhd or @fireship' : '@yourhandle'}
+              placeholder={selectedPlatform === 'youtube'
+                ? '@mkbhd or @fireship'
+                : selectedPlatform === 'x'
+                ? '@mkbhd or x.com/mkbhd'
+                : selectedPlatform === 'tiktok'
+                ? '@creator or tiktok.com/@creator'
+                : '@creator or instagram.com/creator'}
               class="flex-1 p-2 bg-black border border-purple-900 text-white focus:outline-none focus:border-amber-400"
-              onkeydown={(e) => e.key === 'Enter' && selectedPlatform === 'youtube' && handleYouTubeLookup()}
+              onkeydown={(e) => e.key === 'Enter' && handleUniversalLookup()}
             />
-            {#if selectedPlatform === 'youtube'}
-              <button
-                onclick={handleYouTubeLookup}
-                disabled={isLookingUp}
-                type="button"
-                class="px-3.5 py-2 bg-purple-900 hover:bg-purple-800 text-amber-300 border border-purple-700 text-[11px] font-bold disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-              >
-                {#if isLookingUp}
-                  <RefreshCw class="w-3.5 h-3.5 animate-spin text-amber-400" />
-                  <span>Inspecting...</span>
-                {:else}
-                  <Search class="w-3.5 h-3.5 text-amber-400" />
-                  <span>Inspect Channel</span>
-                {/if}
-              </button>
-            {/if}
+            <button
+              onclick={handleUniversalLookup}
+              disabled={isLookingUp}
+              type="button"
+              class="px-3.5 py-2 bg-purple-900 hover:bg-purple-800 text-amber-300 border border-purple-700 text-[11px] font-bold disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+            >
+              {#if isLookingUp}
+                <RefreshCw class="w-3.5 h-3.5 animate-spin text-amber-400" />
+                <span>Inspecting...</span>
+              {:else}
+                <Search class="w-3.5 h-3.5 text-amber-400" />
+                <span>Inspect Channel</span>
+              {/if}
+            </button>
           </div>
           {#if lookupMessage}
             <div class="text-[11px] mt-1.5 text-amber-300 leading-relaxed">
@@ -1085,39 +1110,6 @@
                 id="x-posts"
                 type="number"
                 bind:value={channelPostsCount}
-                min="0"
-                class="w-full p-2 bg-black border border-purple-900 text-white focus:outline-none focus:border-amber-400"
-              />
-            </div>
-          </div>
-        {:else if selectedPlatform === 'linkedin'}
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-purple-900/40">
-            <div>
-              <label for="li-conns" class="block text-slate-400 text-[10px] mb-1">Connections / Followers</label>
-              <input
-                id="li-conns"
-                type="number"
-                bind:value={channelFollowers}
-                min="0"
-                class="w-full p-2 bg-black border border-purple-900 text-white focus:outline-none focus:border-amber-400"
-              />
-            </div>
-            <div>
-              <label for="li-views" class="block text-slate-400 text-[10px] mb-1">Post Impressions</label>
-              <input
-                id="li-views"
-                type="number"
-                bind:value={channelViews}
-                min="0"
-                class="w-full p-2 bg-black border border-purple-900 text-white focus:outline-none focus:border-amber-400"
-              />
-            </div>
-            <div>
-              <label for="li-reacts" class="block text-slate-400 text-[10px] mb-1">Reactions Count</label>
-              <input
-                id="li-reacts"
-                type="number"
-                bind:value={channelReactions}
                 min="0"
                 class="w-full p-2 bg-black border border-purple-900 text-white focus:outline-none focus:border-amber-400"
               />

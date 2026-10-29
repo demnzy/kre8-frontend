@@ -23,6 +23,7 @@ import type {
   SocialAccount,
   SocialConnectPayload,
   YouTubeLookupResult,
+  PlatformLookupResult,
   AIConnectionStatus,
   AIPromptTestResult,
   AIReviseScriptPayload,
@@ -386,6 +387,11 @@ export const api = {
     }),
   lookupYouTubeHandle: (handle: string) =>
     request<YouTubeLookupResult>('/social/youtube-lookup', {
+      method: 'POST',
+      body: JSON.stringify({ handle })
+    }),
+  lookupPlatformHandle: (platform: string, handle: string) =>
+    request<PlatformLookupResult>(`/social/lookup/${encodeURIComponent(platform)}`, {
       method: 'POST',
       body: JSON.stringify({ handle })
     }),

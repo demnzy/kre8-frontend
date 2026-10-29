@@ -337,7 +337,7 @@ export interface SocialConnectPayload {
   channel_id?: string;
 }
 
-export interface YouTubeLookupResult {
+export interface PlatformLookupResult {
   success: boolean;
   platform?: string;
   handle: string;
@@ -353,8 +353,11 @@ export interface YouTubeLookupResult {
   cadence_weekly?: number;
   top_video?: RecentUploadItem;
   recent_videos?: RecentUploadItem[];
+  raw_metrics?: Record<string, any>;
   message?: string;
 }
+
+export type YouTubeLookupResult = PlatformLookupResult;
 
 export interface PlatformChannelDetail {
   is_connected: boolean;
