@@ -441,6 +441,14 @@ export const api = {
     }
     return path;
   },
+  getClipAudioDownloadUrl: (scriptId: number, clipId: number) => {
+    const path = `/api/voice/scripts/${scriptId}/clips/${clipId}/download`;
+    if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+      const backendRoot = API_BASE.replace(/\/api\/?$/, '');
+      return `${backendRoot}${path}`;
+    }
+    return path;
+  },
 
   // Tasks
   getTasks: (params?: { is_completed?: boolean; priority?: string }) => {

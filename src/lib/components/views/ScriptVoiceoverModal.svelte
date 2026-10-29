@@ -10,13 +10,9 @@
     Pause,
     Download,
     Sparkles,
-    Check,
     X,
     Lock,
     RefreshCw,
-    Film,
-    Globe,
-    Gauge,
     AlertCircle,
     ArrowUpRight,
     Mic
@@ -46,12 +42,9 @@
   let selectedVoiceId = $state('af_heart');
   let selectedFormat = $state<'mp3' | 'wav'>('mp3');
 
-  let isSynthesizingAll = $state(false);
   let synthesizingClipId = $state<number | null>(null);
   let activeAudioPlayingUrl = $state<string | null>(null);
   let audioPlayerEl = $state<HTMLAudioElement | null>(null);
-  let isMasterPlaying = $state(false);
-  let masterAudioPlayerEl = $state<HTMLAudioElement | null>(null);
   let errorMessage = $state<string | null>(null);
 
   let isQuotaExceeded = $derived.by(() => {
@@ -92,12 +85,7 @@
       audioPlayerEl.pause();
       audioPlayerEl.src = '';
     }
-    if (masterAudioPlayerEl) {
-      masterAudioPlayerEl.pause();
-      masterAudioPlayerEl.src = '';
-    }
     activeAudioPlayingUrl = null;
-    isMasterPlaying = false;
   }
 
   function togglePlayClip(audioUrl: string | undefined) {
@@ -118,27 +106,6 @@
         appState.showToast('Unable to play audio. Check connection or re-synthesize.', 'error');
       });
       activeAudioPlayingUrl = fullUrl;
-    }
-  }
-
-  function togglePlayMaster() {
-    if (!script.full_audio_url) return;
-    const fullUrl = api.getAudioUrl(script.full_audio_url);
-    if (masterAudioPlayerEl) {
-      if (isMasterPlaying) {
-        masterAudioPlayerEl.pause();
-        isMasterPlaying = false;
-      } else {
-        if (masterAudioPlayerEl.src !== fullUrl) {
-          masterAudioPlayerEl.src = fullUrl;
-          masterAudioPlayerEl.load();
-        }
-        masterAudioPlayerEl.play().catch(e => {
-          console.error('Master play error for URL:', fullUrl, e);
-          appState.showToast('Unable to play master audio. Check connection or re-synthesize.', 'error');
-        });
-        isMasterPlaying = true;
-      }
     }
   }
 
@@ -165,54 +132,20 @@
       appState.showToast(`Scene ${clip.clip_number} voice synthesized!`, 'success');
       await loadVoicesAndQuota();
     } catch (e: any) {
-      if (e?.kind === 'timeout' || e?.message?.includes('taking longer')) {
-        errorMessage = 'Scene voice synthesis is taking longer than expected. Please retry.';
-      } else {
-        errorMessage = e.message || 'Scene voiceover failed';
-      }
+      errorMessage = e.message || 'Scene voiceover failed';
       appState.showToast(errorMessage, 'error');
     } finally {
       synthesizingClipId = null;
     }
   }
 
-  async function handleSynthesizeAll() {
-    if (isQuotaExceeded) {
-      appState.showToast('Free limit reached (5 of 5 used). Upgrade to Creator Pro for unlimited voiceovers.', 'error');
-      return;
-    }
-
-    errorMessage = null;
-    isSynthesizingAll = true;
-    appState.showToast('Synthesizing script voiceover across all scenes...', 'info');
-
-    try {
-      const updatedScript = await api.synthesizeFullScriptAudio(script.id, {
-        voice_id: selectedVoiceId,
-        format: selectedFormat
-      });
-      onScriptUpdated(updatedScript);
-      appState.showToast('Studio voiceover generated and master audio stitched!', 'success');
-      await loadVoicesAndQuota();
-    } catch (e: any) {
-      if (e?.kind === 'timeout' || e?.message?.includes('taking longer')) {
-        errorMessage = 'Full voiceover is taking longer than usual. Try generating scene-by-scene or check your connection.';
-      } else {
-        errorMessage = e.message || 'Full script voiceover failed';
-      }
-      appState.showToast(errorMessage, 'error');
-    } finally {
-      isSynthesizingAll = false;
-    }
-  }
-
-  function triggerDownloadMaster() {
-    if (!script.id) return;
-    const downloadUrl = api.getMasterAudioDownloadUrl(script.id);
+  function triggerDownloadClip(clip: ScriptClip) {
+    if (!script.id || !clip.id) return;
+    const downloadUrl = api.getClipAudioDownloadUrl(script.id, clip.id);
     const a = document.createElement('a');
     a.href = downloadUrl;
     const safeTitle = (script.title || 'script').replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
-    a.setAttribute('download', `${safeTitle}_master.mp3`);
+    a.setAttribute('download', `${safeTitle}_scene_${clip.clip_number}.mp3`);
     a.target = '_blank';
     document.body.appendChild(a);
     a.click();
@@ -220,14 +153,10 @@
   }
 </script>
 
-<!-- Hidden Audio Player Elements -->
+<!-- Hidden Audio Player -->
 <audio
   bind:this={audioPlayerEl}
   onended={() => (activeAudioPlayingUrl = null)}
-></audio>
-<audio
-  bind:this={masterAudioPlayerEl}
-  onended={() => (isMasterPlaying = false)}
 ></audio>
 
 {#if isOpen}
@@ -242,20 +171,20 @@
     ></button>
 
     <div class="relative w-full max-w-xl swiss-card border border-purple-800 bg-[#0c0617] p-5 sm:p-6 space-y-4 shadow-2xl z-10 modal-spring">
-      <!-- Modal Header: Decluttered & Focused -->
+      <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
         <div class="flex items-center gap-2.5">
           <div class="w-8 h-8 rounded bg-amber-400 text-black flex items-center justify-center shrink-0">
             <Volume2 class="w-4 h-4" />
           </div>
           <div>
-            <h3 class="text-base font-bold text-white font-display leading-tight">Studio Voiceover</h3>
-            <p class="text-[11px] text-slate-400">Synthesize human-paced spoken voice for scenes</p>
+            <h3 class="text-base font-bold text-white font-display leading-tight">Scene Voiceover</h3>
+            <p class="text-[11px] text-slate-400">Generate and download studio voice for each scene</p>
           </div>
         </div>
 
         <div class="flex items-center gap-2">
-          <!-- Quota Badge (Enforcing 5-use limit) -->
+          <!-- Quota Badge -->
           {#if quota}
             {#if quota.is_unlimited}
               <span class="px-2.5 py-1 bg-emerald-950/80 border border-emerald-700/80 text-emerald-300 text-[11px] font-mono rounded font-bold flex items-center gap-1">
@@ -293,7 +222,7 @@
               <span>Free limit reached (5 of 5 used)</span>
             </div>
             <p class="text-slate-300 text-[11px]">
-              Upgrade to Creator Pro for unlimited Kokoro and Meta MMS studio voiceovers.
+              Upgrade to Creator Pro for unlimited studio voiceovers.
             </p>
           </div>
 
@@ -315,7 +244,7 @@
         </div>
       {/if}
 
-      <!-- Voice Selection Grid (Clean Personas) -->
+      <!-- Voice Selection Grid -->
       <div class="space-y-2">
         <div class="flex items-center justify-between text-xs font-mono">
           <label for="voice-persona-select" class="text-slate-400 flex items-center gap-1.5">
@@ -342,7 +271,6 @@
           </div>
         </div>
 
-        <!-- Visual Voice Persona Pills / Selector -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {#each voiceOptions as v}
             {@const isSelected = selectedVoiceId === v.id}
@@ -371,45 +299,11 @@
         </div>
       </div>
 
-      <!-- Master Audio Card (Clean Player when generated) -->
-      {#if script.full_audio_url}
-        <div class="p-3 bg-purple-950/40 border border-emerald-500/50 rounded flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <button
-              type="button"
-              onclick={togglePlayMaster}
-              class="w-9 h-9 rounded-full bg-emerald-400 hover:bg-emerald-300 text-black flex items-center justify-center shrink-0 transition-transform active:scale-95 shadow-md"
-              title={isMasterPlaying ? 'Pause Master' : 'Play Master Audio'}
-            >
-              {#if isMasterPlaying}
-                <Pause class="w-4 h-4 fill-black text-black" />
-              {:else}
-                <Play class="w-4 h-4 fill-black text-black ml-0.5" />
-              {/if}
-            </button>
-            <div class="min-w-0">
-              <span class="text-xs font-bold text-white font-display block truncate">Full Script Audio Ready</span>
-              <span class="text-[11px] font-mono text-slate-400">Continuous voice track • Stitched master</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onclick={triggerDownloadMaster}
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-800 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-mono rounded transition-colors shrink-0"
-            title="Download Master MP3"
-          >
-            <Download class="w-3.5 h-3.5 text-amber-400" />
-            <span>Download</span>
-          </button>
-        </div>
-      {/if}
-
-      <!-- Scene Breakdown Audio List -->
+      <!-- Scene-by-Scene Audio Generation & Download List -->
       <div class="space-y-1.5">
         <div class="flex items-center justify-between text-xs font-mono text-slate-400 pb-1">
           <span>Scenes ({script.clips?.length || 0})</span>
-          <span class="text-[10px] text-purple-400">Individual scene previews</span>
+          <span class="text-[10px] text-purple-400">Generate and download scene audio</span>
         </div>
 
         {#if !script.clips || script.clips.length === 0}
@@ -417,28 +311,34 @@
             No scenes defined yet in Script Studio.
           </div>
         {:else}
-          <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+          <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
             {#each script.clips as clip}
-              <div class="p-2.5 bg-black/60 border border-purple-900/60 rounded flex items-center justify-between gap-2.5 text-xs font-mono hover:border-purple-800 transition-colors">
+              <div class="p-3 bg-black/60 border border-purple-900/60 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-mono hover:border-purple-800 transition-colors">
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-4 h-4 rounded bg-amber-400 text-black font-bold text-[10px] flex items-center justify-center shrink-0">
-                      {clip.clip_number}
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="px-1.5 py-0.5 rounded bg-amber-400 text-black font-bold text-[10px] shrink-0">
+                      Scene {clip.clip_number}
                     </span>
-                    <span class="text-slate-300 text-[11px] truncate">
-                      {clip.spoken_dialogue || 'Empty dialogue'}
-                    </span>
+                    {#if clip.audio_duration}
+                      <span class="text-[10px] text-emerald-400 font-mono">
+                        {clip.audio_duration.toFixed(1)}s audio
+                      </span>
+                    {/if}
                   </div>
+                  <p class="text-slate-300 text-[11px] line-clamp-2 leading-relaxed">
+                    {clip.spoken_dialogue || 'Empty dialogue'}
+                  </p>
                 </div>
 
-                <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                   {#if clip.audio_url}
                     {@const isThisPlaying = activeAudioPlayingUrl === api.getAudioUrl(clip.audio_url)}
+                    <!-- Play/Pause Preview -->
                     <button
                       type="button"
                       onclick={() => togglePlayClip(clip.audio_url)}
-                      class="p-1 px-2 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-[11px] rounded transition-colors flex items-center gap-1"
-                      title="Play scene voiceover preview"
+                      class="px-2 py-1 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-[11px] rounded transition-colors flex items-center gap-1"
+                      title="Play scene preview"
                     >
                       {#if isThisPlaying}
                         <Pause class="w-3 h-3 fill-current text-amber-400" />
@@ -448,18 +348,32 @@
                         <span class="text-[10px]">Play</span>
                       {/if}
                     </button>
+
+                    <!-- Direct Download Button for this Scene -->
+                    <button
+                      type="button"
+                      onclick={() => triggerDownloadClip(clip)}
+                      class="px-2 py-1 bg-black hover:bg-purple-950 text-emerald-400 hover:text-emerald-300 border border-purple-800 text-[11px] rounded transition-colors flex items-center gap-1"
+                      title="Download scene audio"
+                    >
+                      <Download class="w-3 h-3" />
+                      <span class="text-[10px]">Download</span>
+                    </button>
                   {/if}
 
+                  <!-- Generate / Re-voice Button -->
                   <button
                     type="button"
                     onclick={() => handleSynthesizeSingleClip(clip)}
-                    disabled={synthesizingClipId === clip.id || isSynthesizingAll || isQuotaExceeded}
-                    class="p-1 px-2 bg-black hover:bg-purple-950 text-slate-400 hover:text-white border border-purple-900 text-[11px] rounded transition-colors disabled:opacity-40"
-                    title={isQuotaExceeded ? 'Free quota reached' : 'Synthesize single scene'}
+                    disabled={synthesizingClipId === clip.id || isQuotaExceeded}
+                    class="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-black font-bold border border-amber-300 text-[11px] rounded transition-colors disabled:opacity-40 flex items-center gap-1"
+                    title={isQuotaExceeded ? 'Free quota reached' : 'Synthesize scene audio'}
                   >
                     {#if synthesizingClipId === clip.id}
-                      <RefreshCw class="w-3 h-3 text-amber-400 animate-spin" />
+                      <RefreshCw class="w-3 h-3 animate-spin text-black" />
+                      <span class="text-[10px]">Generating...</span>
                     {:else}
+                      <Sparkles class="w-3 h-3 text-black" />
                       <span class="text-[10px]">{clip.audio_url ? 'Re-voice' : 'Voice'}</span>
                     {/if}
                   </button>
@@ -471,45 +385,18 @@
       </div>
 
       <!-- Action Footer -->
-      <div class="pt-3 border-t border-purple-900/50 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div class="text-[11px] font-mono text-slate-400 w-full sm:w-auto">
-          {#if isSynthesizingAll}
-            <div class="flex items-center gap-2 text-amber-300">
-              <RefreshCw class="w-3.5 h-3.5 animate-spin text-amber-400" />
-              <span>Synthesizing scenes in parallel... (~5-8s)</span>
-            </div>
-          {:else}
-            <span>Fast parallel neural synthesis</span>
-          {/if}
-        </div>
+      <div class="pt-3 border-t border-purple-900/50 flex items-center justify-between gap-3">
+        <p class="text-[11px] font-mono text-slate-400">
+          Synthesize voiceover scene-by-scene for fast, reliable generation.
+        </p>
 
-        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            onclick={onClose}
-            class="px-3 py-2 text-xs font-mono text-slate-400 hover:text-white rounded"
-          >
-            Close
-          </button>
-
-          <button
-            type="button"
-            onclick={handleSynthesizeAll}
-            disabled={isSynthesizingAll || isQuotaExceeded || !script.clips || script.clips.length === 0}
-            class="flex items-center justify-center gap-2 px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black font-bold font-display text-xs tracking-wider rounded transition-all shadow-md disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-          >
-            {#if isSynthesizingAll}
-              <RefreshCw class="w-3.5 h-3.5 animate-spin" />
-              <span>Generating...</span>
-            {:else if isQuotaExceeded}
-              <Lock class="w-3.5 h-3.5 text-black" />
-              <span>Limit Reached (5/5)</span>
-            {:else}
-              <Sparkles class="w-3.5 h-3.5 text-black" />
-              <span>{script.full_audio_url ? 'Re-generate Full Voice' : 'Generate Full Voice'}</span>
-            {/if}
-          </button>
-        </div>
+        <button
+          type="button"
+          onclick={onClose}
+          class="px-4 py-1.5 bg-black hover:bg-purple-950 border border-purple-800 text-xs font-mono text-slate-300 hover:text-white rounded transition-colors"
+        >
+          Done
+        </button>
       </div>
     </div>
   </div>

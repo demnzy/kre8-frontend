@@ -594,7 +594,7 @@
         >
           <Volume2 class="w-3.5 h-3.5 text-amber-400" />
           <span>Voiceover</span>
-          {#if activeScript?.full_audio_url}
+          {#if activeScript?.full_audio_url || activeScript?.clips?.some(c => c.audio_url)}
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           {/if}
         </button>

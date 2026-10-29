@@ -73,83 +73,17 @@
   let countdownSec = $state<number | null>(null);
   let elapsedSceneMs = $state(0);
 
+  // Teleprompter state
   let containerEl = $state<HTMLElement | null>(null);
   let animFrameId: number | null = null;
   let lastTimestamp: number | null = null;
-
-  // Audio Follow / Voiceover synchronization state
-  let audioEl = $state<HTMLAudioElement | null>(null);
-  let isAudioSyncEnabled = $state(true);
-  let isAudioLoading = $state(false);
-  let sceneAudioDurations = $state<Record<number, number>>({});
-  let audioBlobUrls = $state<Record<number, string>>({});
-
-  function onAudioMetadataLoaded() {
-    if (audioEl && !isNaN(audioEl.duration) && audioEl.duration > 0) {
-      sceneAudioDurations[currentSceneIndex] = audioEl.duration;
-    }
-  }
-
-  let hasAudioAvailable = $derived.by(() => {
-    return !!script.full_audio_url || (script.clips && script.clips.some((c) => !!c.audio_url));
-  });
-
-  // Background in-memory blob preloader for zero-latency instant playback
-  $effect(() => {
-    if (script.clips && script.clips.length > 0) {
-      script.clips.forEach((clip, idx) => {
-        if (clip.audio_url && !audioBlobUrls[idx]) {
-          const fullUrl = api.getAudioUrl(clip.audio_url);
-          fetch(fullUrl)
-            .then(res => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`);
-              return res.blob();
-            })
-            .then(blob => {
-              const blobUrl = URL.createObjectURL(blob);
-              audioBlobUrls[idx] = blobUrl;
-            })
-            .catch(() => {
-              // Silently falls back to streaming URL
-            });
-        }
-      });
-    }
-  });
-
-  let currentSceneAudioUrl = $derived.by(() => {
-    // Prefer zero-latency in-memory blob URL if available
-    if (audioBlobUrls[currentSceneIndex]) {
-      return audioBlobUrls[currentSceneIndex];
-    }
-    const clip = script.clips?.[currentSceneIndex];
-    if (clip?.audio_url) {
-      return api.getAudioUrl(clip.audio_url);
-    }
-    return null;
-  });
-
-  // Keep audio src proactively updated so playback is zero-latency instant
-  $effect(() => {
-    if (audioEl && currentSceneAudioUrl) {
-      if (audioEl.src !== currentSceneAudioUrl && !audioEl.src.endsWith(currentSceneAudioUrl)) {
-        audioEl.src = currentSceneAudioUrl;
-      }
-    }
-  });
-
-  $effect(() => {
-    if (audioEl) {
-      audioEl.playbackRate = playbackSpeed;
-    }
-  });
 
   // Prepare scenes from clips or fallback to full_script parsing
   let preparedScenes = $derived.by<PreparedScene[]>(() => {
     if (script.clips && script.clips.length > 0) {
       return script.clips.map((clip, idx) => {
         const text = clip.spoken_dialogue || '';
-        const exactAudioDur = sceneAudioDurations[idx] || (clip.audio_duration && clip.audio_duration > 0 ? clip.audio_duration : null);
+        const exactAudioDur = clip.audio_duration && clip.audio_duration > 0 ? clip.audio_duration : null;
         const dur = exactAudioDur || (clip.estimated_duration && clip.estimated_duration > 0
           ? clip.estimated_duration
           : estimateDurationFromText(text));
@@ -402,33 +336,14 @@
     countdownSec = null;
     lastTimestamp = performance.now();
     if (animFrameId) cancelAnimationFrame(animFrameId);
-
-    if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
-      if (!audioEl.src.endsWith(currentSceneAudioUrl)) {
-        audioEl.src = currentSceneAudioUrl;
-      }
-      audioEl.currentTime = elapsedSceneMs / 1000;
-      audioEl.playbackRate = playbackSpeed;
-      const playPromise = audioEl.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((e) => {
-          console.warn('Audio play notice:', e);
-        });
-      }
-    }
-
     animFrameId = requestAnimationFrame(onFrame);
   }
 
   function pause() {
     isPlaying = false;
-    isAudioLoading = false;
     if (animFrameId) {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
-    }
-    if (audioEl && !audioEl.paused) {
-      audioEl.pause();
     }
   }
 
@@ -450,38 +365,9 @@
     }
     const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
     lastTimestamp = timestamp;
-
-    const sceneDurationMs = (activeScene?.duration || 10) * 1000;
-
-    if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
-      // Audio is the master clock when actively playing sound
-      if (!audioEl.paused && !audioEl.ended) {
-        elapsedSceneMs = audioEl.currentTime * 1000;
-      } else {
-        // Audio is buffering or preparing: keep teleprompter moving smoothly with 0 stutter
-        elapsedSceneMs += deltaMs;
-      }
-
-      // Check if scene has completed
-      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.04) || elapsedSceneMs >= sceneDurationMs) {
-        if (currentSceneIndex < preparedScenes.length - 1) {
-          transitionToNextScene();
-          return;
-        } else {
-          elapsedSceneMs = (audioEl.duration || activeScene.duration) * 1000;
-          pause();
-          return;
-        }
-      }
-
-      scrollToActiveWord();
-      animFrameId = requestAnimationFrame(onFrame);
-      return;
-    }
-
-    // Fallback: timer-based animation when audio sync is off or no audio available
     elapsedSceneMs += deltaMs;
 
+    const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
       if (currentSceneIndex < preparedScenes.length - 1) {
         transitionToNextScene();
@@ -512,19 +398,6 @@
       containerEl.scrollTo({ top: 0, behavior: 'instant' });
     }
 
-    if (isAudioSyncEnabled && audioEl) {
-      const nextAudioUrl = audioBlobUrls[currentSceneIndex] || (script.clips?.[currentSceneIndex]?.audio_url ? api.getAudioUrl(script.clips[currentSceneIndex].audio_url) : null);
-      if (nextAudioUrl) {
-        audioEl.src = nextAudioUrl;
-        audioEl.currentTime = 0;
-        audioEl.playbackRate = playbackSpeed;
-        const p = audioEl.play();
-        if (p !== undefined) {
-          p.catch((e) => console.warn('Next scene audio play:', e));
-        }
-      }
-    }
-
     animFrameId = requestAnimationFrame(onFrame);
   }
 
@@ -551,10 +424,6 @@
     pausedOnScroll = false;
     isTransitioningScene = false;
     if (transitionTimer) clearTimeout(transitionTimer);
-    if (audioEl) {
-      audioEl.pause();
-      audioEl.currentTime = 0;
-    }
     if (containerEl) {
       containerEl.scrollTo({ top: 0, behavior: 'auto' });
     }
@@ -596,9 +465,6 @@
   function seekToWord(token: Token) {
     if (token.startTime !== undefined) {
       elapsedSceneMs = token.startTime * 1000;
-      if (isAudioSyncEnabled && audioEl) {
-        audioEl.currentTime = token.startTime;
-      }
       pausedOnScroll = false;
       scrollToActiveWord();
     }
@@ -706,12 +572,6 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', handleKeyDown);
     }
-    // Revoke memory blob URLs
-    Object.values(audioBlobUrls).forEach((url) => {
-      try {
-        URL.revokeObjectURL(url);
-      } catch (e) {}
-    });
   });
 </script>
 
@@ -722,20 +582,6 @@
     role="region"
     aria-label="Teleprompter Studio"
   >
-    <audio
-      bind:this={audioEl}
-      onloadedmetadata={onAudioMetadataLoaded}
-      onended={() => {
-        if (isPlaying) {
-          if (currentSceneIndex < preparedScenes.length - 1) {
-            transitionToNextScene();
-          } else {
-            pause();
-          }
-        }
-      }}
-      preload="auto"
-    ></audio>
     <!-- Single Sleek Top Bar (Auto-dims during recording unless hovered) -->
     <header
       class="h-14 px-5 bg-[#090412]/95 backdrop-blur-md border-b border-purple-900/40 flex items-center justify-between gap-4 shrink-0 z-30 transition-opacity duration-300 {
@@ -829,33 +675,6 @@
           <Wind class="w-3.5 h-3.5 text-cyan-400" />
           <span class="hidden sm:inline text-[11px]">Breaths</span>
         </button>
-
-        <!-- Voiceover Audio Sync Toggle -->
-        {#if hasAudioAvailable}
-          <button
-            type="button"
-            onclick={() => {
-              isAudioSyncEnabled = !isAudioSyncEnabled;
-              if (!isAudioSyncEnabled && audioEl) {
-                audioEl.pause();
-              } else if (isAudioSyncEnabled && isPlaying && audioEl && currentSceneAudioUrl) {
-                audioEl.src = currentSceneAudioUrl;
-                audioEl.currentTime = elapsedSceneMs / 1000;
-                audioEl.playbackRate = playbackSpeed;
-                audioEl.play().catch(() => {});
-              }
-            }}
-            class="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-colors {
-              isAudioSyncEnabled
-                ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 ring-1 ring-emerald-400/40 shadow-sm'
-                : 'bg-black border-purple-900/60 text-slate-400 hover:text-white'
-            }"
-            title="Follow spoken voiceover audio in sync with highlighter"
-          >
-            <Volume2 class="w-3.5 h-3.5 {isAudioSyncEnabled ? 'text-emerald-400' : 'text-slate-400'}" />
-            <span class="hidden sm:inline text-[11px]">Voice Sync</span>
-          </button>
-        {/if}
 
         <!-- Eye-Level Guide Toggle -->
         <button
