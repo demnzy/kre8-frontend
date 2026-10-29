@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
-  import { resolveAvatarUrl, handleAvatarError } from '../../utils/avatar';
+  import { resolveAvatarUrl, resolveMediaUrl, handleAvatarError, handleThumbnailError } from '../../utils/avatar';
   import LoadError from '../layout/LoadError.svelte';
   import type {
     AnalyticsSummary,
@@ -838,7 +838,13 @@
                   <!-- Thumbnail & Badges -->
                   <div class="relative aspect-video w-full overflow-hidden bg-purple-950 border border-purple-900/50">
                     {#if vid.thumbnail_url}
-                      <img src={vid.thumbnail_url} alt={vid.title} class="w-full h-full object-cover" />
+                      <img
+                        src={resolveMediaUrl(vid.thumbnail_url, 'thumbnail')}
+                        alt={vid.title}
+                        referrerpolicy="no-referrer"
+                        onerror={(e) => handleThumbnailError(e, vid.title)}
+                        class="w-full h-full object-cover"
+                      />
                     {/if}
                     {#if isTop}
                       <span class="absolute top-2 left-2 px-2 py-0.5 bg-amber-400 text-black font-bold font-mono text-[9px] flex items-center gap-1 shadow-md">

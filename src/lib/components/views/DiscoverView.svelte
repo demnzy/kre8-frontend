@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
-  import { resolveAvatarUrl, handleAvatarError } from '../../utils/avatar';
+  import { resolveAvatarUrl, resolveMediaUrl, handleAvatarError, handleThumbnailError } from '../../utils/avatar';
   import LoadError from '../layout/LoadError.svelte';
   import type { NewsArticle, NewsAIIdea, CreatorWatchlist } from '../../types';
   import {
@@ -495,11 +495,12 @@
               <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 {#if article.image_url}
                   <img
-                    src={article.image_url}
+                    src={resolveMediaUrl(article.image_url, 'thumbnail')}
                     alt={article.headline}
+                    referrerpolicy="no-referrer"
+                    onerror={(e) => handleThumbnailError(e, article.headline)}
                     class="w-full sm:w-32 h-20 object-cover border border-purple-900/60 shrink-0 bg-black/60"
                     loading="lazy"
-                    onerror={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
                   />
                 {/if}
                 <div class="space-y-1 flex-1">
