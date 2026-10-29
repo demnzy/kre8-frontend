@@ -45,6 +45,7 @@ const USER_KEY = 'kre8_current_user';
 const MODULE_KEY = 'kre8_active_module';
 const DEFAULT_TIMEOUT_MS = 20_000;
 const AI_TIMEOUT_MS = 90_000;
+const VOICE_TIMEOUT_MS = 180_000;
 
 export type ApiErrorKind = 'network' | 'timeout' | 'http';
 
@@ -398,7 +399,7 @@ export const api = {
     payload: { spoken_dialogue?: string; voice_id?: string; format?: string } = {}
   ) =>
     request<ScriptClip>(`/voice/scripts/${scriptId}/synthesize-clip/${clipId}`, {
-      timeoutMs: AI_TIMEOUT_MS,
+      timeoutMs: VOICE_TIMEOUT_MS,
       method: 'POST',
       body: JSON.stringify(payload)
     }),
@@ -407,7 +408,7 @@ export const api = {
     payload: { voice_id?: string; format?: string } = {}
   ) =>
     request<Script>(`/voice/scripts/${scriptId}/synthesize-all`, {
-      timeoutMs: AI_TIMEOUT_MS,
+      timeoutMs: VOICE_TIMEOUT_MS,
       method: 'POST',
       body: JSON.stringify(payload)
     }),
