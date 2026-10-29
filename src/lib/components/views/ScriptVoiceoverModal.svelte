@@ -96,8 +96,14 @@
       return;
     }
     if (audioPlayerEl) {
-      audioPlayerEl.src = fullUrl;
-      audioPlayerEl.play().catch(e => console.error('Audio play error:', e));
+      if (audioPlayerEl.src !== fullUrl) {
+        audioPlayerEl.src = fullUrl;
+        audioPlayerEl.load();
+      }
+      audioPlayerEl.play().catch(e => {
+        console.error('Audio play error for URL:', fullUrl, e);
+        appState.showToast('Unable to play audio. Check network or regenerate.', 'error');
+      });
       activeAudioPlayingUrl = fullUrl;
     }
   }
@@ -110,8 +116,14 @@
         masterAudioPlayerEl.pause();
         isMasterPlaying = false;
       } else {
-        masterAudioPlayerEl.src = fullUrl;
-        masterAudioPlayerEl.play().catch(e => console.error('Master play error:', e));
+        if (masterAudioPlayerEl.src !== fullUrl) {
+          masterAudioPlayerEl.src = fullUrl;
+          masterAudioPlayerEl.load();
+        }
+        masterAudioPlayerEl.play().catch(e => {
+          console.error('Master play error for URL:', fullUrl, e);
+          appState.showToast('Unable to play master audio. Check network or regenerate.', 'error');
+        });
         isMasterPlaying = true;
       }
     }

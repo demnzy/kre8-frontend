@@ -360,10 +360,11 @@
     if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
       if (audioEl.src !== currentSceneAudioUrl) {
         audioEl.src = currentSceneAudioUrl;
+        audioEl.load();
       }
       audioEl.currentTime = elapsedSceneMs / 1000;
       audioEl.playbackRate = playbackSpeed;
-      audioEl.play().catch(() => {});
+      audioEl.play().catch((e) => console.warn('Teleprompter audio follow play error:', e));
     }
   }
 

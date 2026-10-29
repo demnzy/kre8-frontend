@@ -413,10 +413,33 @@ export const api = {
     }),
   getAudioUrl: (urlOrFilename: string) => {
     if (!urlOrFilename) return '';
-    if (urlOrFilename.startsWith('http')) return urlOrFilename;
-    return urlOrFilename.startsWith('/') ? urlOrFilename : `/api/voice/audio/${urlOrFilename}`;
+    if (urlOrFilename.startsWith('http://') || urlOrFilename.startsWith('https://')) {
+      return urlOrFilename;
+    }
+
+    let clean = urlOrFilename.startsWith('/') ? urlOrFilename : `/voice/audio/${urlOrFilename}`;
+
+    if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+      const backendRoot = API_BASE.replace(/\/api\/?$/, '');
+      if (!clean.startsWith('/api')) {
+        clean = `/api${clean}`;
+      }
+      return `${backendRoot}${clean}`;
+    }
+
+    if (!clean.startsWith('/api')) {
+      clean = `/api${clean}`;
+    }
+    return clean;
   },
-  getMasterAudioDownloadUrl: (scriptId: number) => `/api/voice/scripts/${scriptId}/download-master`,
+  getMasterAudioDownloadUrl: (scriptId: number) => {
+    const path = `/api/voice/scripts/${scriptId}/download-master`;
+    if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+      const backendRoot = API_BASE.replace(/\/api\/?$/, '');
+      return `${backendRoot}${path}`;
+    }
+    return path;
+  },
 
   // Tasks
   getTasks: (params?: { is_completed?: boolean; priority?: string }) => {
