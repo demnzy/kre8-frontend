@@ -283,19 +283,29 @@
 
       <!-- Right Actions -->
       <div class="flex items-center gap-3">
-        <button
-          onclick={() => appState.openAuth("login")}
-          class="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors"
-        >
-          Sign In
-        </button>
-        <button
-          onclick={() => appState.openAuth("signup")}
-          class="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
-        >
-          <span>Get Started Free</span>
-          <ArrowRight class="w-3.5 h-3.5" />
-        </button>
+        {#if appState.isAuthenticated}
+          <button
+            onclick={() => appState.enterWorkspace()}
+            class="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
+          >
+            <span>Enter Studio</span>
+            <ArrowRight class="w-3.5 h-3.5" />
+          </button>
+        {:else}
+          <button
+            onclick={() => appState.openAuth("login")}
+            class="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors"
+          >
+            Sign In
+          </button>
+          <button
+            onclick={() => appState.openAuth("signup")}
+            class="px-4 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-all shadow-sm flex items-center gap-1.5"
+          >
+            <span>Get Started Free</span>
+            <ArrowRight class="w-3.5 h-3.5" />
+          </button>
+        {/if}
       </div>
     </div>
   </header>
@@ -349,13 +359,23 @@
       <div
         class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-2"
       >
-        <button
-          onclick={() => appState.openAuth("signup")}
-          class="px-6 py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-semibold text-sm transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2.5"
-        >
-          <span>Create Free Account</span>
-          <ArrowRight class="w-4 h-4" />
-        </button>
+        {#if appState.isAuthenticated}
+          <button
+            onclick={() => appState.enterWorkspace()}
+            class="px-6 py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-semibold text-sm transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2.5"
+          >
+            <span>Go to Studio</span>
+            <ArrowRight class="w-4 h-4" />
+          </button>
+        {:else}
+          <button
+            onclick={() => appState.openAuth("signup")}
+            class="px-6 py-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-semibold text-sm transition-all shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2.5"
+          >
+            <span>Create Free Account</span>
+            <ArrowRight class="w-4 h-4" />
+          </button>
+        {/if}
 
         <a
           href="#interactive-demo"

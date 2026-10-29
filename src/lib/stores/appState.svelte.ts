@@ -16,18 +16,18 @@ export type AppModule =
   | 'settings';
 
 export class AppState {
-  // Navigation Flow: Starts on Landing Page first!
-  pageView = $state<'landing' | 'workspace'>('landing');
+  // Navigation Flow: Persists workspace view if user has an active token!
+  pageView = $state<'landing' | 'workspace'>(authStorage.getToken() ? 'workspace' : 'landing');
   authModalOpen = $state(false);
   authMode = $state<'login' | 'signup'>('signup');
   apiKeyModalOpen = $state(false);
 
-  // Authenticated Creator User
-  currentUser = $state<CurrentUser | null>(null);
+  // Authenticated Creator User: restored immediately from local storage on reload
+  currentUser = $state<CurrentUser | null>(authStorage.getUser());
   isAuthenticated = $derived(!!this.currentUser);
 
-  // Workspace Navigation
-  activeModule = $state<AppModule>('dashboard');
+  // Workspace Navigation: remembers last active module across reloads
+  activeModule = $state<AppModule>(authStorage.getActiveModule());
   sidebarOpen = $state(true);
   quickCaptureOpen = $state(false);
   commandPaletteOpen = $state(false);
@@ -84,6 +84,15 @@ export class AppState {
   );
   hasConfiguredApiKey = $derived(hasSavedKeyForActiveProvider(this.preferences));
 
+  setCurrentUser(user: CurrentUser | null) {
+    this.currentUser = user;
+    if (user) {
+      authStorage.setUser(user);
+    } else {
+      authStorage.removeUser();
+    }
+  }
+
   async loadInitialData() {
     try {
       this.isLoading = true;
@@ -91,15 +100,22 @@ export class AppState {
       if (token) {
         try {
           const user = await api.getMe();
-          this.currentUser = user;
+          this.setCurrentUser(user);
           if (user.preferences) {
             this.preferences = user.preferences;
           }
-        } catch {
+          // Authenticated: maintain workspace view on reload
+          this.pageView = 'workspace';
+        } catch (err: any) {
           // Token expired or invalid
+          console.warn('Session verification failed, logging out:', err);
           authStorage.removeToken();
-          this.currentUser = null;
+          this.setCurrentUser(null);
+          this.pageView = 'landing';
         }
+      } else {
+        this.setCurrentUser(null);
+        this.pageView = 'landing';
       }
       const prefs = await api.getPreferences();
       if (prefs) {
@@ -114,8 +130,12 @@ export class AppState {
 
   logout() {
     api.logout();
-    this.currentUser = null;
+    this.setCurrentUser(null);
     this.apiKeyModalOpen = false;
+    authStorage.removeToken();
+    try {
+      localStorage.removeItem('kre8_active_module');
+    } catch {}
     this.preferences = {
       id: 1,
       primary_niche: 'Technology',
@@ -132,9 +152,11 @@ export class AppState {
     this.showToast('Logged out of Kre8 Studio', 'info');
   }
 
-  enterWorkspace(targetModule: AppModule = 'dashboard') {
+  enterWorkspace(targetModule?: AppModule) {
     this.pageView = 'workspace';
-    this.activeModule = targetModule;
+    if (targetModule) {
+      this.setModule(targetModule);
+    }
     this.authModalOpen = false;
     if (!this.hasConfiguredApiKey) {
       this.apiKeyModalOpen = true;
@@ -162,6 +184,7 @@ export class AppState {
 
   setModule(mod: AppModule) {
     this.activeModule = mod;
+    authStorage.setActiveModule(mod);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -197,8 +220,8 @@ export class AppState {
 
   /** Called by the API client when the stored session token is rejected. */
   handleSessionExpired() {
-    if (!this.currentUser) return;
-    this.currentUser = null;
+    this.setCurrentUser(null);
+    this.pageView = 'landing';
     this.showToast('Your session expired. Please log in again.', 'info');
     this.openAuth('login');
   }

@@ -286,11 +286,11 @@
       });
 
       authStorage.setToken(res.access_token);
-      appState.currentUser = {
+      appState.setCurrentUser({
         id: res.user.id,
         email: res.user.email,
         display_name: res.user.display_name
-      };
+      });
       await appState.loadInitialData();
 
       appState.showToast(`Welcome to Kre8, ${res.user.display_name}!`, 'success');
@@ -314,11 +314,11 @@
       });
 
       authStorage.setToken(res.access_token);
-      appState.currentUser = {
+      appState.setCurrentUser({
         id: res.user.id,
         email: res.user.email,
         display_name: res.user.display_name
-      };
+      });
       await appState.loadInitialData();
 
       appState.showToast(`Welcome back, ${res.user.display_name}!`, 'success');
@@ -339,11 +339,11 @@
         password: 'creator123'
       });
       authStorage.setToken(res.access_token);
-      appState.currentUser = {
+      appState.setCurrentUser({
         id: res.user.id,
         email: res.user.email,
         display_name: res.user.display_name
-      };
+      });
       await appState.loadInitialData();
       appState.showToast('Entered demo workspace', 'info');
       appState.enterWorkspace('dashboard');
@@ -358,11 +358,11 @@
           weekly_post_goal: 4
         });
         authStorage.setToken(regRes.access_token);
-        appState.currentUser = {
+        appState.setCurrentUser({
           id: regRes.user.id,
           email: regRes.user.email,
           display_name: regRes.user.display_name
-        };
+        });
         await appState.loadInitialData();
         appState.showToast('Initialized demo workspace', 'info');
         appState.enterWorkspace('dashboard');

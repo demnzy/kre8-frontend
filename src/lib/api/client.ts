@@ -38,6 +38,8 @@ function resolveApiBase(): string {
 }
 const API_BASE: string = resolveApiBase();
 const TOKEN_KEY = 'kre8_token';
+const USER_KEY = 'kre8_current_user';
+const MODULE_KEY = 'kre8_active_module';
 const DEFAULT_TIMEOUT_MS = 20_000;
 const AI_TIMEOUT_MS = 90_000;
 
@@ -100,11 +102,51 @@ export const authStorage = {
       console.error('Failed to save token to localStorage', e);
     }
   },
+  getUser: (): CurrentUser | null => {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+  setUser: (user: CurrentUser) => {
+    try {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch (e) {
+      console.error('Failed to save user to localStorage', e);
+    }
+  },
+  removeUser: () => {
+    try {
+      localStorage.removeItem(USER_KEY);
+    } catch (e) {
+      console.error('Failed to remove user from localStorage', e);
+    }
+  },
   removeToken: () => {
     try {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
     } catch (e) {
       console.error('Failed to remove token from localStorage', e);
+    }
+  },
+  getActiveModule: (): any => {
+    try {
+      const mod = localStorage.getItem(MODULE_KEY);
+      const validModules = ['dashboard', 'content', 'ideas', 'scripts', 'discover', 'calendar', 'analytics', 'tasks', 'notes', 'goals', 'settings'];
+      if (mod && validModules.includes(mod)) {
+        return mod;
+      }
+    } catch {}
+    return 'dashboard';
+  },
+  setActiveModule: (mod: string) => {
+    try {
+      localStorage.setItem(MODULE_KEY, mod);
+    } catch (e) {
+      console.error('Failed to save active module to localStorage', e);
     }
   }
 };
