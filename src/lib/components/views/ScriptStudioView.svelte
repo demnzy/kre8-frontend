@@ -22,10 +22,12 @@
     Video,
     FolderOpen,
     Users,
-    Zap
+    Zap,
+    Play
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import LoadError from '../layout/LoadError.svelte';
+  import ScriptTeleprompterModal from './ScriptTeleprompterModal.svelte';
 
   let scripts = $state<Script[]>([]);
   let contentItems = $state<ContentItem[]>([]);
@@ -37,6 +39,8 @@
   let loadError = $state<string | null>(null);
   let generationError = $state<string | null>(null);
   let pendingCustomInstructions = $state<string | undefined>(undefined);
+  let showTeleprompter = $state(false);
+  let teleprompterInitialSceneIndex = $state(0);
 
   // Script Revision Co-Pilot state
   let isRevising = $state(false);
@@ -579,15 +583,29 @@
 
       <div class="flex items-center gap-2 shrink-0">
         <button
+          onclick={() => {
+            teleprompterInitialSceneIndex = 0;
+            showTeleprompter = true;
+          }}
+          disabled={!activeScript || (!activeScript.full_script && (!activeScript.clips || activeScript.clips.length === 0))}
+          class="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-all disabled:opacity-50 shadow-sm"
+          title="Open teleprompter playmode with synchronized word highlighting & scene pacing"
+        >
+          <Play class="w-3.5 h-3.5 fill-black text-black" />
+          <span>Play Mode</span>
+        </button>
+
+        <button
           onclick={copyTeleprompterText}
           class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900 hover:border-amber-400/50 text-slate-200 text-xs font-mono transition-all"
+          title="Copy script text to clipboard"
         >
           {#if isCopied}
             <Check class="w-3.5 h-3.5 text-emerald-400" />
             <span>Copied</span>
           {:else}
             <Copy class="w-3.5 h-3.5 text-amber-400" />
-            <span>Teleprompter</span>
+            <span>Copy Text</span>
           {/if}
         </button>
 
@@ -1137,13 +1155,28 @@
               <span class="text-[10px] font-mono text-purple-400">[{clipsDurationTotal}s total • {activeScript.clips?.length || 0} scenes]</span>
             </div>
 
-            <button
-              onclick={handleAddClip}
-              class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-800 text-slate-300 text-xs font-mono hover:text-white hover:border-amber-400/50 transition-colors"
-            >
-              <Plus class="w-3.5 h-3.5 text-amber-400" />
-              <span>Add Scene</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick={() => {
+                  teleprompterInitialSceneIndex = 0;
+                  showTeleprompter = true;
+                }}
+                class="flex items-center gap-1 px-2 py-1 bg-amber-400 text-black font-bold text-xs font-mono hover:bg-amber-300 transition-colors shadow-sm"
+                title="Rehearse all scenes in Teleprompter play mode"
+              >
+                <Play class="w-3 h-3 fill-black text-black" />
+                <span>Play All</span>
+              </button>
+
+              <button
+                onclick={handleAddClip}
+                class="flex items-center gap-1.5 px-2.5 py-1 bg-black border border-purple-800 text-slate-300 text-xs font-mono hover:text-white hover:border-amber-400/50 transition-colors"
+              >
+                <Plus class="w-3.5 h-3.5 text-amber-400" />
+                <span>Add Scene</span>
+              </button>
+            </div>
           </div>
 
           {#if !activeScript.clips || activeScript.clips.length === 0}
@@ -1175,8 +1208,21 @@
                       </div>
 
                       <button
+                        type="button"
+                        onclick={() => {
+                          teleprompterInitialSceneIndex = idx;
+                          showTeleprompter = true;
+                        }}
+                        class="p-1 text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 rounded transition-colors"
+                        title={`Play Scene ${clip.clip_number} in Teleprompter`}
+                      >
+                        <Play class="w-3.5 h-3.5 fill-current" />
+                      </button>
+
+                      <button
                         onclick={() => handleRemoveClip(idx)}
                         class="text-slate-600 hover:text-rose-400 p-1"
+                        title="Delete Scene"
                       >
                         <Trash2 class="w-3.5 h-3.5" />
                       </button>
@@ -1226,5 +1272,14 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if activeScript}
+    <ScriptTeleprompterModal
+      script={activeScript}
+      isOpen={showTeleprompter}
+      initialSceneIndex={teleprompterInitialSceneIndex}
+      onClose={() => (showTeleprompter = false)}
+    />
   {/if}
 </div>
