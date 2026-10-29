@@ -79,7 +79,7 @@
 
   // Audio Follow / Voiceover synchronization state
   let audioEl = $state<HTMLAudioElement | null>(null);
-  let isAudioSyncEnabled = $state(false);
+  let isAudioSyncEnabled = $state(true);
   let isAudioLoading = $state(false);
   let sceneAudioDurations = $state<Record<number, number>>({});
 
@@ -99,6 +99,15 @@
       return api.getAudioUrl(clip.audio_url);
     }
     return null;
+  });
+
+  // Keep audio src proactively updated so playback is zero-latency instant
+  $effect(() => {
+    if (audioEl && currentSceneAudioUrl) {
+      if (!audioEl.src.endsWith(currentSceneAudioUrl)) {
+        audioEl.src = currentSceneAudioUrl;
+      }
+    }
   });
 
   $effect(() => {
@@ -359,49 +368,27 @@
     }, 850);
   }
 
-  async function play() {
+  function play() {
     isPlaying = true;
     pausedOnScroll = false;
-    lastTimestamp = null;
+    countdownSec = null;
+    lastTimestamp = performance.now();
     if (animFrameId) cancelAnimationFrame(animFrameId);
 
     if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
-      if (audioEl.src !== currentSceneAudioUrl) {
-        isAudioLoading = true;
+      if (!audioEl.src.endsWith(currentSceneAudioUrl)) {
         audioEl.src = currentSceneAudioUrl;
-        audioEl.load();
-
-        await new Promise<void>((resolve) => {
-          let settled = false;
-          const done = () => {
-            if (!settled) {
-              settled = true;
-              audioEl?.removeEventListener('canplay', done);
-              audioEl?.removeEventListener('loadedmetadata', done);
-              audioEl?.removeEventListener('error', done);
-              resolve();
-            }
-          };
-          audioEl?.addEventListener('canplay', done);
-          audioEl?.addEventListener('loadedmetadata', done);
-          audioEl?.addEventListener('error', done);
-          setTimeout(done, 600);
-        });
-        isAudioLoading = false;
       }
-
-      if (!isPlaying) return;
-
       audioEl.currentTime = elapsedSceneMs / 1000;
       audioEl.playbackRate = playbackSpeed;
-      try {
-        await audioEl.play();
-      } catch (e) {
-        console.warn('Audio play notice:', e);
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((e) => {
+          console.warn('Audio play notice:', e);
+        });
       }
     }
 
-    lastTimestamp = performance.now();
     animFrameId = requestAnimationFrame(onFrame);
   }
 
@@ -419,27 +406,16 @@
 
   function togglePlayPause() {
     pausedOnScroll = false;
-    if (countdownSec !== null) {
-      countdownSec = null;
-      return;
-    }
+    countdownSec = null;
     if (isPlaying) {
       pause();
     } else {
-      if (elapsedSceneMs === 0 && countdownSec === null) {
-        startCountdownAndPlay();
-      } else {
-        play();
-      }
+      play();
     }
   }
 
   function onFrame(timestamp: number) {
     if (!isPlaying) return;
-    if (isAudioLoading) {
-      animFrameId = requestAnimationFrame(onFrame);
-      return;
-    }
 
     if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
       // Audio is the single master clock when playing
@@ -448,7 +424,7 @@
       }
 
       // Check if audio has completed or reached end
-      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.05)) {
+      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.04)) {
         if (currentSceneIndex < preparedScenes.length - 1) {
           transitionToNextScene();
           return;
@@ -495,33 +471,29 @@
       return;
     }
 
-    pause();
-    isTransitioningScene = true;
+    currentSceneIndex++;
+    elapsedSceneMs = 0;
+    lastTimestamp = performance.now();
 
-    // Smoothly scroll back to the top of the container
     if (containerEl) {
-      containerEl.scrollTo({ top: 0, behavior: 'smooth' });
+      containerEl.scrollTo({ top: 0, behavior: 'instant' });
     }
 
-    if (transitionTimer) clearTimeout(transitionTimer);
-
-    // Give 450ms breath pause, then switch scene and preload audio
-    transitionTimer = setTimeout(() => {
-      currentSceneIndex++;
-      elapsedSceneMs = 0;
-      lastTimestamp = null;
-
-      // Preload next scene audio if in audio sync mode
-      if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
-        audioEl.src = currentSceneAudioUrl;
-        audioEl.load();
+    if (isAudioSyncEnabled && audioEl) {
+      const nextClip = script.clips?.[currentSceneIndex];
+      const nextAudioUrl = nextClip?.audio_url ? api.getAudioUrl(nextClip.audio_url) : null;
+      if (nextAudioUrl) {
+        audioEl.src = nextAudioUrl;
+        audioEl.currentTime = 0;
+        audioEl.playbackRate = playbackSpeed;
+        const p = audioEl.play();
+        if (p !== undefined) {
+          p.catch((e) => console.warn('Next scene audio play:', e));
+        }
       }
+    }
 
-      setTimeout(() => {
-        isTransitioningScene = false;
-        play();
-      }, 350);
-    }, 450);
+    animFrameId = requestAnimationFrame(onFrame);
   }
 
   function scrollToActiveWord() {
