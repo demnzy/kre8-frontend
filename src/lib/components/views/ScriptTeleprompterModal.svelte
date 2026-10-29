@@ -12,6 +12,7 @@
     Minimize2,
     X,
     Eye,
+    EyeOff,
     Clock,
     Film,
     Sparkles,
@@ -19,7 +20,8 @@
     Type,
     Gauge,
     FlipHorizontal,
-    Tv
+    Tv,
+    Wind
   } from 'lucide-svelte';
 
   interface Props {
@@ -32,11 +34,13 @@
   let { script, isOpen, initialSceneIndex = 0, onClose }: Props = $props();
 
   interface Token {
-    type: 'word' | 'cue' | 'heading' | 'break';
+    type: 'word' | 'breath' | 'pause' | 'cue' | 'heading' | 'break';
     text?: string;
+    breathType?: 'sentence' | 'comma' | 'beat' | 'paragraph';
     isBold?: boolean;
     isItalic?: boolean;
     weight?: number;
+    duration?: number;  // in seconds
     startTime?: number; // seconds within scene
     endTime?: number;   // seconds within scene
   }
@@ -50,14 +54,18 @@
     onScreenText?: string;
     tokens: Token[];
     rawText: string;
+    wordCount: number;
+    breathCount: number;
   }
 
   let currentSceneIndex = $state(0);
   let isPlaying = $state(false);
-  let playbackSpeed = $state(1.0); // 0.75, 1.0, 1.25, 1.5
+  let playbackSpeed = $state(1.0); // 0.8, 1.0, 1.25, 1.5
   let fontSize = $state<'md' | 'lg' | 'xl' | '2xl'>('xl');
   let isMirrored = $state(false);
   let isFullscreen = $state(false);
+  let showEyeGuide = $state(true);
+  let showBreathMarkers = $state(true);
   let countdownSec = $state<number | null>(null);
   let elapsedSceneMs = $state(0);
 
@@ -73,6 +81,9 @@
         const dur = clip.estimated_duration && clip.estimated_duration > 0
           ? clip.estimated_duration
           : estimateDurationFromText(text);
+        const tokens = tokenizeSceneText(text, Math.max(3, dur));
+        const words = tokens.filter(t => t.type === 'word');
+        const breaths = tokens.filter(t => t.type === 'breath' || t.type === 'pause');
         return {
           index: idx,
           sceneNumber: clip.clip_number || idx + 1,
@@ -80,8 +91,10 @@
           duration: Math.max(3, dur),
           visualDirection: clip.visual_direction,
           onScreenText: clip.on_screen_text,
-          tokens: tokenizeSceneText(text, Math.max(3, dur)),
-          rawText: text
+          tokens,
+          rawText: text,
+          wordCount: words.length,
+          breathCount: breaths.length
         };
       });
     }
@@ -89,13 +102,16 @@
     // Fallback: Partition full_script into scenes using markdown headers or bracket markers
     const full = script.full_script || '';
     if (!full.trim()) {
+      const fallbackTokens = tokenizeSceneText('Ready to record. Write or generate your dialogue in Script Studio.', 5);
       return [{
         index: 0,
         sceneNumber: 1,
         title: 'Scene 1',
         duration: script.target_duration_seconds || 60,
-        tokens: tokenizeSceneText('Ready to record. Write or generate your dialogue in Script Studio.', 5),
-        rawText: ''
+        tokens: fallbackTokens,
+        rawText: '',
+        wordCount: 11,
+        breathCount: 1
       }];
     }
 
@@ -103,13 +119,18 @@
     return sections.map((sec, idx) => {
       const trimmed = sec.trim();
       const dur = estimateDurationFromText(trimmed);
+      const tokens = tokenizeSceneText(trimmed, Math.max(4, dur));
+      const words = tokens.filter(t => t.type === 'word');
+      const breaths = tokens.filter(t => t.type === 'breath' || t.type === 'pause');
       return {
         index: idx,
         sceneNumber: idx + 1,
         title: `Scene ${idx + 1}`,
         duration: Math.max(4, dur),
-        tokens: tokenizeSceneText(trimmed, Math.max(4, dur)),
-        rawText: trimmed
+        tokens,
+        rawText: trimmed,
+        wordCount: words.length,
+        breathCount: breaths.length
       };
     });
   });
@@ -128,89 +149,178 @@
     return priorSec + (elapsedSceneMs / 1000);
   });
 
-  let activeWordIndex = $derived.by(() => {
-    if (!activeScene) return -1;
+  // Find currently active token (word, breath, or pause)
+  let activeToken = $derived.by<Token | null>(() => {
+    if (!activeScene) return null;
     const currentSec = elapsedSceneMs / 1000;
-    const words = activeScene.tokens.filter(t => t.type === 'word');
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      if (w.startTime !== undefined && w.endTime !== undefined) {
-        if (currentSec >= w.startTime && currentSec < w.endTime) {
-          return i;
+    for (const token of activeScene.tokens) {
+      if (token.startTime !== undefined && token.endTime !== undefined) {
+        if (currentSec >= token.startTime && currentSec < token.endTime) {
+          return token;
         }
       }
     }
-    if (currentSec >= activeScene.duration) {
-      return words.length - 1;
-    }
-    return 0;
+    // If at end of scene, return last timed token
+    const timed = activeScene.tokens.filter(t => t.endTime !== undefined);
+    return timed.length > 0 ? timed[timed.length - 1] : null;
   });
 
   function estimateDurationFromText(text: string): number {
     const clean = text.replace(/\[.*?\]/g, '').replace(/#+/g, '').trim();
     const wordCount = clean.split(/\s+/).filter(Boolean).length;
-    // ~140 words per minute = ~2.33 words per second
-    return Math.max(4, Math.round(wordCount / 2.33));
+    // Natural human speaking pace: ~135 words/min + 20% pause/breath time = ~2.25 words/sec net
+    return Math.max(4, Math.round(wordCount / 2.25));
   }
 
+  /**
+   * Parses text into tokens with human speech dynamics:
+   * - Monosyllabic vs multisyllabic syllable weighting
+   * - Sentence termination breaths (. ! ?)
+   * - Clause micro-pauses (, ; : —)
+   * - Paragraph / thought transition resets
+   * - Explicit cues ([PAUSE], [BEAT], [BREATHE])
+   */
   function tokenizeSceneText(text: string, sceneDurSec: number): Token[] {
     const lines = text.split('\n');
-    const tokens: Token[] = [];
+    const rawTokens: Token[] = [];
 
     for (let l = 0; l < lines.length; l++) {
       const rawLine = lines[l].trim();
       if (!rawLine) {
-        tokens.push({ type: 'break' });
+        // Line break indicates thought reset
+        rawTokens.push({
+          type: 'breath',
+          breathType: 'paragraph',
+          text: 'breath',
+          weight: 2.8
+        });
+        rawTokens.push({ type: 'break' });
         continue;
       }
 
       // 1. Heading `# Title`
       if (/^#{1,6}\s+/.test(rawLine)) {
-        tokens.push({ type: 'heading', text: rawLine.replace(/^#{1,6}\s+/, '') });
+        rawTokens.push({ type: 'heading', text: rawLine.replace(/^#{1,6}\s+/, '') });
+        rawTokens.push({ type: 'break' });
         continue;
       }
 
-      // 2. Full-line cue `[B-ROLL: Camera Zoom]`
+      // 2. Full-line cue `[B-ROLL: Camera Zoom]` or `[PAUSE]`
       if (/^\[(.*?)\]$/.test(rawLine)) {
-        tokens.push({ type: 'cue', text: rawLine.slice(1, -1) });
+        const cueContent = rawLine.slice(1, -1).trim();
+        if (/^(PAUSE|BEAT|BREATHE|SILENCE)(\s+\d+s?)?$/i.test(cueContent)) {
+          rawTokens.push({
+            type: 'pause',
+            breathType: 'beat',
+            text: cueContent.toLowerCase(),
+            weight: 4.0
+          });
+        } else {
+          rawTokens.push({ type: 'cue', text: cueContent });
+        }
         continue;
       }
 
       // 3. Inline markdown: **bold**, *italic*, [inline cue], regular words
-      const regex = /(\*\*.*?\*\*|\*.*?\*|\[.*?\]|[^\s*\[\]]+)/g;
+      const regex = /(\*\*.*?\*\*|\*.*?\*|\[.*?\]|\(.*?\)|[^\s*\[\]\(\)]+)/g;
       let match;
       while ((match = regex.exec(rawLine)) !== null) {
         const part = match[0];
+
+        // Explicit inline pause like (pause) or [pause]
+        if (/^[\[\(](PAUSE|BEAT|BREATHE|SILENCE)[\]\)]$/i.test(part)) {
+          rawTokens.push({
+            type: 'pause',
+            breathType: 'beat',
+            text: 'beat',
+            weight: 3.5
+          });
+          continue;
+        }
+
         if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
           const inner = part.slice(2, -2);
-          inner.split(/\s+/).forEach(w => {
-            if (w) tokens.push({ type: 'word', text: w, isBold: true, isItalic: false, weight: Math.max(1, w.length) });
-          });
+          processWordsIntoTokens(inner, true, false, rawTokens);
         } else if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
           const inner = part.slice(1, -1);
-          inner.split(/\s+/).forEach(w => {
-            if (w) tokens.push({ type: 'word', text: w, isBold: false, isItalic: true, weight: Math.max(1, w.length) });
-          });
+          processWordsIntoTokens(inner, false, true, rawTokens);
         } else if (part.startsWith('[') && part.endsWith(']')) {
-          tokens.push({ type: 'cue', text: part.slice(1, -1) });
+          rawTokens.push({ type: 'cue', text: part.slice(1, -1) });
         } else {
-          tokens.push({ type: 'word', text: part, isBold: false, isItalic: false, weight: Math.max(1, part.length) });
+          processWordsIntoTokens(part, false, false, rawTokens);
         }
       }
     }
 
-    // Calculate proportional timeline for spoken words based on syllable / char weight
-    const spokenWords = tokens.filter(t => t.type === 'word');
-    const totalWeight = spokenWords.reduce((acc, t) => acc + (t.weight || 1), 0) || 1;
+    // Allocate realistic human timeline across words and breaths
+    const timedTokens = rawTokens.filter(t => t.type === 'word' || t.type === 'breath' || t.type === 'pause');
+    const totalWeight = timedTokens.reduce((acc, t) => acc + (t.weight || 1), 0) || 1;
+
     let currTime = 0;
-    for (const w of spokenWords) {
-      const dur = ((w.weight || 1) / totalWeight) * sceneDurSec;
-      w.startTime = currTime;
-      w.endTime = currTime + dur;
+    for (const t of timedTokens) {
+      const dur = ((t.weight || 1) / totalWeight) * sceneDurSec;
+      t.duration = dur;
+      t.startTime = currTime;
+      t.endTime = currTime + dur;
       currTime += dur;
     }
 
-    return tokens;
+    return rawTokens;
+  }
+
+  function processWordsIntoTokens(
+    content: string,
+    isBold: boolean,
+    isItalic: boolean,
+    targetList: Token[]
+  ) {
+    const rawWords = content.split(/\s+/).filter(Boolean);
+    for (const w of rawWords) {
+      // Check trailing punctuation for natural breath / micro-pauses
+      const hasSentenceEnd = /[.!?]+$/.test(w);
+      const hasClausePause = /[,;:\u2014]+$/.test(w) || w.endsWith('--');
+
+      // Word speech weight based on syllable / length estimation
+      const cleanLen = w.replace(/[^a-zA-Z0-9]/g, '').length;
+      let weight = 2.0;
+      if (cleanLen <= 3) {
+        weight = 1.3; // short filler/connector: "in", "the", "to"
+      } else if (cleanLen <= 7) {
+        weight = 2.2; // standard word
+      } else if (cleanLen <= 11) {
+        weight = 3.2; // multisyllabic word
+      } else {
+        weight = 4.2; // long complex word
+      }
+
+      if (isBold) weight *= 1.35; // vocal emphasis
+      if (w === w.toUpperCase() && cleanLen > 1) weight *= 1.25;
+
+      targetList.push({
+        type: 'word',
+        text: w,
+        isBold,
+        isItalic,
+        weight
+      });
+
+      // Insert natural human breathing pauses
+      if (hasSentenceEnd) {
+        targetList.push({
+          type: 'breath',
+          breathType: 'sentence',
+          text: 'breath',
+          weight: 2.8 // ~0.45s to 0.65s breath
+        });
+      } else if (hasClausePause) {
+        targetList.push({
+          type: 'breath',
+          breathType: 'comma',
+          text: 'pause',
+          weight: 1.2 // ~0.20s micro-pause
+        });
+      }
+    }
   }
 
   function startCountdownAndPlay() {
@@ -294,7 +404,7 @@
 
   function scrollToActiveWord() {
     if (!containerEl) return;
-    const currentEl = containerEl.querySelector('#teleprompter-current-word') as HTMLElement | null;
+    const currentEl = containerEl.querySelector('#teleprompter-current-target') as HTMLElement | null;
     if (!currentEl) return;
     const containerRect = containerEl.getBoundingClientRect();
     const wordRect = currentEl.getBoundingClientRect();
@@ -303,7 +413,7 @@
 
     if (Math.abs(diff) > 2) {
       // Smooth continuous damping without CSS scroll animation jitter
-      const step = Math.sign(diff) * Math.min(Math.abs(diff) * 0.12, 12);
+      const step = Math.sign(diff) * Math.min(Math.abs(diff) * 0.12, 14);
       containerEl.scrollTop += step;
     }
   }
@@ -363,6 +473,9 @@
     } else if (e.key === 'f' || e.key === 'F') {
       e.preventDefault();
       toggleFullscreen();
+    } else if (e.key === 'b' || e.key === 'B') {
+      e.preventDefault();
+      showBreathMarkers = !showBreathMarkers;
     } else if (e.key === 'Escape') {
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
@@ -412,43 +525,97 @@
 </script>
 
 {#if isOpen}
-  <div use:portal class="fixed inset-0 z-50 bg-[#07030c] text-white flex flex-col font-sans select-none overflow-hidden animate-in fade-in duration-200">
-    <!-- Top Studio Header -->
-    <header class="h-16 px-6 bg-[#0c0517] border-b border-purple-900/60 flex items-center justify-between gap-4 shrink-0 z-20">
+  <div
+    use:portal
+    class="fixed inset-0 z-50 bg-[#06030a] text-white flex flex-col font-sans select-none overflow-hidden animate-in fade-in duration-200"
+    role="region"
+    aria-label="Teleprompter Studio"
+  >
+    <!-- Single Sleek Top Bar (Auto-dims during recording unless hovered) -->
+    <header
+      class="h-14 px-5 bg-[#090412]/95 backdrop-blur-md border-b border-purple-900/40 flex items-center justify-between gap-4 shrink-0 z-30 transition-opacity duration-300 {
+        isPlaying ? 'opacity-25 hover:opacity-100' : 'opacity-100'
+      }"
+    >
+      <!-- Left: Scene and Timing Status -->
       <div class="flex items-center gap-3 min-w-0">
-        <div class="flex items-center gap-2 px-2.5 py-1 bg-amber-400 text-black font-bold font-mono text-xs tracking-wider uppercase">
+        <div class="flex items-center gap-1.5 px-2 py-0.5 bg-amber-400 text-black font-bold font-mono text-xs rounded shrink-0">
           <Tv class="w-3.5 h-3.5" />
-          <span>Teleprompter</span>
+          <span>Scene {currentSceneIndex + 1}/{preparedScenes.length}</span>
         </div>
 
-        <div class="min-w-0">
-          <h2 class="text-sm font-bold text-white truncate font-display">
+        <div class="flex items-center gap-2 text-xs font-mono min-w-0">
+          <span class="text-amber-300 font-bold shrink-0">
+            {formatTime(elapsedSceneMs / 1000)} / {formatTime(activeScene.duration)}
+          </span>
+          <span class="text-slate-600 hidden sm:inline">•</span>
+          <span class="text-slate-400 text-[11px] hidden sm:inline truncate max-w-[200px]" title={script.title}>
             {script.title || 'Untitled Script'}
-          </h2>
-          <div class="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            <span>Scene {currentSceneIndex + 1} of {preparedScenes.length}</span>
-            <span class="text-slate-600">•</span>
-            <span class="text-amber-400">
-              {formatTime(elapsedSceneMs / 1000)} / {formatTime(activeScene.duration)}
-            </span>
-            <span class="text-slate-600">•</span>
-            <span class="text-slate-400">
-              Total {formatTime(totalElapsedSec)} / {formatTime(totalScriptDurationSec)}
-            </span>
-          </div>
+          </span>
         </div>
+
+        <!-- Inline Visual Cue Pill (if any exists for this scene) -->
+        {#if activeScene.onScreenText}
+          <div class="hidden md:flex items-center gap-1 px-2 py-0.5 bg-black border border-purple-900 text-purple-300 text-[11px] font-mono rounded truncate max-w-[240px]">
+            <Film class="w-3 h-3 text-purple-400 shrink-0" />
+            <span class="truncate">{activeScene.onScreenText}</span>
+          </div>
+        {/if}
       </div>
 
-      <!-- Quick Studio Controls -->
-      <div class="flex items-center gap-2 sm:gap-3">
-        <!-- Speed Controls -->
-        <div class="flex items-center gap-1 px-2 py-1 bg-black border border-purple-900/60 rounded text-xs font-mono">
-          <Gauge class="w-3.5 h-3.5 text-purple-400 mr-1 hidden sm:inline" />
+      <!-- Center: Slim Scene Progress -->
+      <div class="hidden lg:flex items-center gap-2 w-32 shrink-0">
+        <div class="flex-1 h-1 bg-black border border-purple-900/80 rounded-full overflow-hidden">
+          <div
+            class="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-75"
+            style={`width: ${Math.min(100, (elapsedSceneMs / (activeScene.duration * 1000)) * 100)}%`}
+          ></div>
+        </div>
+        <span class="text-[10px] text-slate-400 font-mono">
+          {Math.round(Math.min(100, (elapsedSceneMs / (activeScene.duration * 1000)) * 100))}%
+        </span>
+      </div>
+
+      <!-- Right: Minimalist Controls -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <!-- Natural Breaths Toggle -->
+        <button
+          type="button"
+          onclick={() => (showBreathMarkers = !showBreathMarkers)}
+          class="flex items-center gap-1 px-2 py-1 rounded border text-xs font-mono transition-colors {
+            showBreathMarkers
+              ? 'bg-cyan-950/80 border-cyan-700/80 text-cyan-300'
+              : 'bg-black border-purple-900/60 text-slate-500 hover:text-slate-300'
+          }"
+          title="Toggle visual breath indicators (B)"
+        >
+          <Wind class="w-3.5 h-3.5 text-cyan-400" />
+          <span class="hidden sm:inline text-[11px]">Breaths</span>
+        </button>
+
+        <!-- Eye-Level Guide Toggle -->
+        <button
+          type="button"
+          onclick={() => (showEyeGuide = !showEyeGuide)}
+          class="p-1.5 rounded border transition-colors {showEyeGuide
+            ? 'bg-purple-950/80 border-purple-700 text-amber-300'
+            : 'bg-black border-purple-900/60 text-slate-500 hover:text-slate-300'}"
+          title="Toggle camera eye-level guide"
+        >
+          {#if showEyeGuide}
+            <Eye class="w-3.5 h-3.5" />
+          {:else}
+            <EyeOff class="w-3.5 h-3.5" />
+          {/if}
+        </button>
+
+        <!-- Playback Speed -->
+        <div class="flex items-center bg-black border border-purple-900/60 rounded px-1 py-0.5 text-xs font-mono">
           {#each [0.8, 1.0, 1.25, 1.5] as spd}
             <button
               type="button"
               onclick={() => (playbackSpeed = spd)}
-              class="px-1.5 py-0.5 rounded text-[11px] font-mono transition-colors {playbackSpeed === spd
+              class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors {playbackSpeed === spd
                 ? 'bg-amber-400 text-black font-bold'
                 : 'text-slate-400 hover:text-white'}"
             >
@@ -458,8 +625,7 @@
         </div>
 
         <!-- Typography Size -->
-        <div class="flex items-center gap-1 px-2 py-1 bg-black border border-purple-900/60 rounded text-xs font-mono">
-          <Type class="w-3.5 h-3.5 text-amber-400 mr-1 hidden sm:inline" />
+        <div class="hidden sm:flex items-center bg-black border border-purple-900/60 rounded px-1 py-0.5 text-xs font-mono">
           {#each [
             { id: 'md', label: 'M' },
             { id: 'lg', label: 'L' },
@@ -469,7 +635,7 @@
             <button
               type="button"
               onclick={() => (fontSize = sz.id as any)}
-              class="px-1.5 py-0.5 rounded text-[11px] font-mono transition-colors {fontSize === sz.id
+              class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors {fontSize === sz.id
                 ? 'bg-purple-600 text-white font-bold'
                 : 'text-slate-400 hover:text-white'}"
               title={`Font size ${sz.label}`}
@@ -479,23 +645,23 @@
           {/each}
         </div>
 
-        <!-- Mirror Mode Button (For hardware teleprompter glass) -->
+        <!-- Mirror Text (beam-splitter glass) -->
         <button
           type="button"
           onclick={() => (isMirrored = !isMirrored)}
-          class="p-2 rounded border transition-colors {isMirrored
+          class="p-1.5 rounded border transition-colors {isMirrored
             ? 'bg-amber-400 text-black border-amber-300 font-bold'
             : 'bg-black border-purple-900/60 text-slate-300 hover:text-white'}"
-          title="Mirror text horizontally (for beam splitter glass)"
+          title="Mirror text horizontally (for prompter glass)"
         >
           <FlipHorizontal class="w-3.5 h-3.5" />
         </button>
 
-        <!-- Fullscreen Button -->
+        <!-- Fullscreen -->
         <button
           type="button"
           onclick={toggleFullscreen}
-          class="p-2 bg-black border border-purple-900/60 rounded text-slate-300 hover:text-white transition-colors"
+          class="p-1.5 bg-black border border-purple-900/60 rounded text-slate-300 hover:text-white transition-colors"
           title="Toggle Fullscreen (F)"
         >
           {#if isFullscreen}
@@ -505,98 +671,66 @@
           {/if}
         </button>
 
-        <!-- Close Studio Mode -->
+        <!-- Exit -->
         <button
           type="button"
           onclick={closeTeleprompter}
-          class="p-2 bg-purple-950/70 hover:bg-rose-950 text-slate-300 hover:text-rose-200 border border-purple-800 hover:border-rose-700 rounded transition-colors"
+          class="p-1.5 bg-black hover:bg-rose-950 text-slate-400 hover:text-rose-200 border border-purple-900/60 hover:border-rose-800 rounded transition-colors"
           title="Exit Teleprompter (Esc)"
         >
-          <X class="w-4 h-4" />
+          <X class="w-3.5 h-3.5" />
         </button>
       </div>
     </header>
 
-    <!-- Scene Information Cue Bar -->
-    <div class="px-6 py-2.5 bg-[#0e071a] border-b border-purple-900/40 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shrink-0">
-      <div class="flex items-center gap-3">
-        <span class="text-amber-400 font-bold">
-          Scene {activeScene.sceneNumber} / {preparedScenes.length}
-        </span>
-        {#if activeScene.onScreenText}
-          <div class="flex items-center gap-1.5 px-2 py-0.5 bg-black border border-amber-400/30 text-amber-300 text-[11px]">
-            <span class="text-slate-500 uppercase text-[9px]">Graphic:</span>
-            <span>{activeScene.onScreenText}</span>
+    <!-- Teleprompter Main Display Area -->
+    <div class="relative flex-1 flex flex-col justify-center items-center overflow-hidden bg-[#06030a]">
+      <!-- Decluttered Subtle Eye-Level Focal Guideline -->
+      {#if showEyeGuide}
+        <div class="absolute left-0 right-0 top-[35%] -translate-y-1/2 pointer-events-none z-10 flex items-center justify-between px-8 opacity-25 hover:opacity-50 transition-opacity">
+          <div class="flex items-center gap-1.5 text-[10px] font-mono text-amber-300">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            <span>lens eye contact</span>
           </div>
-        {/if}
-        {#if activeScene.visualDirection}
-          <div class="flex items-center gap-1.5 px-2 py-0.5 bg-purple-950/60 border border-purple-800 text-purple-200 text-[11px]">
-            <Film class="w-3 h-3 text-purple-400" />
-            <span>{activeScene.visualDirection}</span>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Scene Progress Bar -->
-      <div class="flex items-center gap-2 w-full sm:w-48">
-        <div class="flex-1 h-1.5 bg-black border border-purple-900 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-75"
-            style={`width: ${Math.min(100, (elapsedSceneMs / (activeScene.duration * 1000)) * 100)}%`}
-          ></div>
+          <div class="flex-1 mx-4 border-b border-amber-400/30"></div>
+          <span class="text-[10px] font-mono text-amber-300">35%</span>
         </div>
-        <span class="text-[10px] text-slate-400 font-mono shrink-0">
-          {Math.round(Math.min(100, (elapsedSceneMs / (activeScene.duration * 1000)) * 100))}%
-        </span>
-      </div>
-    </div>
-
-    <!-- Teleprompter Main Display Container -->
-    <div class="relative flex-1 flex flex-col justify-center items-center overflow-hidden bg-[#07030c]">
-      <!-- Eye-Level Camera Guideline -->
-      <div class="absolute left-0 right-0 top-[35%] -translate-y-1/2 pointer-events-none z-10 flex items-center justify-between px-6 opacity-40">
-        <div class="flex items-center gap-1 text-[10px] font-mono text-amber-400">
-          <Eye class="w-3.5 h-3.5 text-amber-400" />
-          <span>EYE CONTACT LEVEL</span>
-        </div>
-        <div class="flex-1 mx-4 border-b border-dashed border-amber-400/40"></div>
-        <span class="text-[10px] font-mono text-amber-400">LOOK INTO LENS</span>
-      </div>
+      {/if}
 
       <!-- Countdown Overlay -->
       {#if countdownSec !== null}
-        <div class="absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-4">
+        <div class="absolute inset-0 z-40 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center space-y-4">
           <div class="text-8xl font-black font-mono text-amber-400 animate-ping">
             {countdownSec}
           </div>
           <p class="text-sm font-mono text-slate-300 tracking-wider">
-            Look at the camera lens • Starting in {countdownSec}...
+            Look directly at the camera lens • Starting in {countdownSec}...
           </p>
         </div>
       {/if}
 
-      <!-- Scrollable Text Area -->
+      <!-- Scrollable Text Channel -->
       <div
         bind:this={containerEl}
-        class="w-full h-full overflow-y-auto px-8 sm:px-16 lg:px-24 py-36 {isMirrored ? 'scale-x-[-1]' : ''}"
+        class="w-full h-full overflow-y-auto px-6 sm:px-12 lg:px-20 pt-44 pb-64 {isMirrored ? 'scale-x-[-1]' : ''}"
       >
-        <div class="max-w-4xl mx-auto space-y-6">
-          <!-- Spoken Dialogue Tokens -->
-          <div class="leading-relaxed {
-            fontSize === 'md' ? 'text-xl sm:text-2xl leading-normal' :
-            fontSize === 'lg' ? 'text-2xl sm:text-3xl leading-relaxed' :
-            fontSize === 'xl' ? 'text-3xl sm:text-4xl leading-loose font-medium' :
-            'text-4xl sm:text-5xl leading-loose font-medium'
+        <div class="max-w-3xl mx-auto space-y-6">
+          <!-- Spoken Dialogue & Paced Breath Tokens -->
+          <div class="leading-[2.2] {
+            fontSize === 'md' ? 'text-xl sm:text-2xl leading-[2.1]' :
+            fontSize === 'lg' ? 'text-2xl sm:text-3xl leading-[2.2]' :
+            fontSize === 'xl' ? 'text-3xl sm:text-4xl leading-[2.3] font-medium' :
+            'text-4xl sm:text-5xl leading-[2.4] font-medium'
           }">
             {#each activeScene.tokens as token, tIdx}
               {#if token.type === 'break'}
-                <div class="h-4"></div>
+                <div class="h-6"></div>
               {:else if token.type === 'heading'}
-                <div class="my-3 px-3 py-1 bg-purple-950/60 border-l-4 border-amber-400 text-amber-300 font-mono text-sm sm:text-base font-bold uppercase tracking-wider inline-block">
+                <div class="my-3 px-3 py-1 bg-purple-950/40 border-l-4 border-amber-400 text-amber-300 font-mono text-xs sm:text-sm font-bold uppercase tracking-wider inline-block">
                   # {token.text}
                 </div>
               {:else if token.type === 'cue'}
-                <div class="my-2 inline-flex items-center gap-1.5 px-3 py-1 bg-black/90 border border-purple-800 text-purple-300 font-mono text-xs sm:text-sm font-semibold rounded mr-2">
+                <div class="my-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-black/80 border border-purple-900 text-purple-300 font-mono text-xs font-semibold rounded mr-2">
                   <Film class="w-3 h-3 text-purple-400" />
                   <span>[{token.text}]</span>
                 </div>
@@ -605,100 +739,116 @@
                 {@const isCurrent = (token.startTime !== undefined && token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.startTime && (elapsedSceneMs / 1000) < token.endTime)}
                 
                 <span
-                  id={isCurrent ? 'teleprompter-current-word' : undefined}
+                  id={isCurrent ? 'teleprompter-current-target' : undefined}
                   class="inline-block transition-all duration-100 mr-2 rounded {
                     isCurrent
                       ? 'bg-amber-400 text-black font-extrabold px-1.5 py-0.5 shadow-lg ring-2 ring-amber-300 scale-105'
                       : isPast
-                      ? 'text-white font-medium opacity-90'
-                      : 'text-slate-500 opacity-60 font-normal'
-                  } {token.isBold ? 'font-bold' : ''} {token.isItalic ? 'italic' : ''}"
+                      ? 'text-white/85 font-medium'
+                      : 'text-slate-500/50 font-normal'
+                  } {token.isBold ? 'font-bold underline decoration-amber-400/50 decoration-2' : ''} {token.isItalic ? 'italic' : ''}"
                 >
                   {token.text}
                 </span>
+              {:else if token.type === 'breath' || token.type === 'pause'}
+                {@const isPast = (token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.endTime)}
+                {@const isCurrent = (token.startTime !== undefined && token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.startTime && (elapsedSceneMs / 1000) < token.endTime)}
+
+                {#if showBreathMarkers && (token.breathType === 'sentence' || token.breathType === 'paragraph' || token.breathType === 'beat')}
+                  <span
+                    id={isCurrent ? 'teleprompter-current-target' : undefined}
+                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-mono transition-all duration-150 mr-2 align-middle {
+                      isCurrent
+                        ? 'bg-cyan-400 text-black font-bold ring-2 ring-cyan-300 scale-110 shadow-lg'
+                        : isPast
+                        ? 'text-slate-600/50 opacity-30'
+                        : 'text-cyan-400/60 bg-cyan-950/20 border border-cyan-800/40 opacity-70'
+                    }"
+                    title={token.breathType === 'beat' ? 'Pause beat' : 'Natural breath pause'}
+                  >
+                    <Wind class="w-3 h-3 {isCurrent ? 'animate-pulse' : ''}" />
+                    <span>{isCurrent ? 'inhale' : (token.breathType === 'beat' ? 'beat' : 'breath')}</span>
+                  </span>
+                {/if}
               {/if}
             {/each}
           </div>
 
-          <!-- Bottom spacing to allow smooth scrolling past the last line -->
-          <div class="h-48"></div>
+          <!-- Bottom spacing buffer for comfortable reading of the last scene line -->
+          <div class="h-64"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Bottom Studio Dock Controls -->
-    <footer class="h-20 px-6 bg-[#0c0517] border-t border-purple-900/60 flex items-center justify-between gap-4 shrink-0 z-20">
-      <!-- Scene Navigation Buttons -->
-      <div class="flex items-center gap-2">
+      <!-- Floating Minimalist Island Dock (Auto-dims during playback unless hovered) -->
+      <footer
+        class="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 px-5 py-2.5 bg-[#090412]/90 backdrop-blur-md border border-purple-900/60 rounded-full shadow-2xl flex items-center gap-3 transition-opacity duration-300 {
+          isPlaying ? 'opacity-25 hover:opacity-100' : 'opacity-100'
+        }"
+      >
+        <!-- Prev Scene -->
         <button
           type="button"
           onclick={prevScene}
           disabled={currentSceneIndex === 0}
-          class="flex items-center gap-1 px-3 py-2 bg-black border border-purple-900 text-slate-300 hover:text-white hover:border-amber-400/50 text-xs font-mono transition-colors disabled:opacity-40"
+          class="p-2 rounded-full bg-black/60 border border-purple-900/80 text-slate-300 hover:text-white hover:border-amber-400/50 transition-colors disabled:opacity-30"
           title="Previous Scene (Left Arrow)"
         >
           <ChevronLeft class="w-4 h-4" />
-          <span class="hidden sm:inline">Prev Scene</span>
         </button>
 
+        <!-- Restart -->
         <button
           type="button"
           onclick={restartScene}
-          class="flex items-center gap-1 px-3 py-2 bg-black border border-purple-900 text-slate-300 hover:text-white hover:border-amber-400/50 text-xs font-mono transition-colors"
+          class="p-2 rounded-full bg-black/60 border border-purple-900/80 text-slate-300 hover:text-white hover:border-amber-400/50 transition-colors"
           title="Restart Scene (R)"
         >
           <RotateCcw class="w-3.5 h-3.5 text-amber-400" />
-          <span class="hidden sm:inline">Restart</span>
         </button>
-      </div>
 
-      <!-- Big Primary Play/Pause Button -->
-      <div class="flex items-center gap-3">
+        <!-- Primary Play/Pause Button -->
         <button
           type="button"
           onclick={togglePlayPause}
-          class="flex items-center justify-center gap-2 px-8 py-3 bg-amber-400 hover:bg-amber-300 text-black font-bold font-display text-sm tracking-wider shadow-lg rounded transition-all active:scale-95"
+          class="flex items-center gap-2 px-6 py-2 bg-amber-400 hover:bg-amber-300 text-black font-bold font-display text-xs tracking-wider rounded-full shadow-lg transition-transform active:scale-95"
           title="Play / Pause (Spacebar)"
         >
           {#if isPlaying}
-            <Pause class="w-5 h-5 fill-black text-black" />
+            <Pause class="w-4 h-4 fill-black text-black" />
             <span>PAUSE</span>
           {:else}
-            <Play class="w-5 h-5 fill-black text-black" />
+            <Play class="w-4 h-4 fill-black text-black" />
             <span>{elapsedSceneMs > 0 ? 'RESUME' : 'PLAY'}</span>
           {/if}
         </button>
-      </div>
 
-      <!-- Next Scene & Scene Selector Carousel -->
-      <div class="flex items-center gap-2">
         <!-- Scene Selector Pills -->
-        <div class="hidden lg:flex items-center gap-1 px-2 py-1 bg-black border border-purple-900/60 rounded max-w-xs overflow-x-auto">
+        <div class="hidden sm:flex items-center gap-1 px-1.5 py-0.5 bg-black/60 border border-purple-900/60 rounded-full">
           {#each preparedScenes as s, sIdx}
             <button
               type="button"
               onclick={() => jumpToScene(sIdx)}
-              class="w-6 h-6 rounded flex items-center justify-center text-[10px] font-mono transition-colors {sIdx === currentSceneIndex
+              class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono transition-colors {sIdx === currentSceneIndex
                 ? 'bg-amber-400 text-black font-bold'
                 : 'text-slate-400 hover:text-white hover:bg-purple-950'}"
-              title={`Jump to Scene ${s.sceneNumber}`}
+              title={`Scene ${s.sceneNumber}`}
             >
               {s.sceneNumber}
             </button>
           {/each}
         </div>
 
+        <!-- Next Scene -->
         <button
           type="button"
           onclick={nextScene}
           disabled={currentSceneIndex >= preparedScenes.length - 1}
-          class="flex items-center gap-1 px-3 py-2 bg-black border border-purple-900 text-slate-300 hover:text-white hover:border-amber-400/50 text-xs font-mono transition-colors disabled:opacity-40"
+          class="p-2 rounded-full bg-black/60 border border-purple-900/80 text-slate-300 hover:text-white hover:border-amber-400/50 transition-colors disabled:opacity-30"
           title="Next Scene (Right Arrow)"
         >
-          <span class="hidden sm:inline">Next Scene</span>
           <ChevronRight class="w-4 h-4" />
         </button>
-      </div>
-    </footer>
+      </footer>
+    </div>
   </div>
 {/if}
