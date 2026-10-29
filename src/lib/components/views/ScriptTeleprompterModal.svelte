@@ -67,6 +67,8 @@
   let showEyeGuide = $state(true);
   let showBreathMarkers = $state(true);
   let pausedOnScroll = $state(false);
+  let isTransitioningScene = $state(false);
+  let transitionTimer: any = null;
   let countdownSec = $state<number | null>(null);
   let elapsedSceneMs = $state(0);
 
@@ -370,13 +372,8 @@
 
     const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
-      // Advance to next scene with breather
       if (currentSceneIndex < preparedScenes.length - 1) {
-        pause();
-        currentSceneIndex++;
-        restartScene();
-        // Give 3-second countdown for the next scene so speaker can read and see the screen first
-        startCountdownAndPlay();
+        transitionToNextScene();
         return;
       } else {
         // Script finished
@@ -390,6 +387,32 @@
     scrollToActiveWord();
 
     animFrameId = requestAnimationFrame(onFrame);
+  }
+
+  function transitionToNextScene() {
+    if (currentSceneIndex >= preparedScenes.length - 1) {
+      pause();
+      elapsedSceneMs = (activeScene?.duration || 10) * 1000;
+      return;
+    }
+
+    pause();
+    currentSceneIndex++;
+    elapsedSceneMs = 0;
+    lastTimestamp = null;
+    isTransitioningScene = true;
+
+    // Smoothly scroll back to the top of the container
+    if (containerEl) {
+      containerEl.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (transitionTimer) clearTimeout(transitionTimer);
+    // Give 850ms for scroll to settle and eye contact to align before resuming highlighting
+    transitionTimer = setTimeout(() => {
+      isTransitioningScene = false;
+      play();
+    }, 850);
   }
 
   function scrollToActiveWord() {
@@ -413,6 +436,8 @@
     elapsedSceneMs = 0;
     lastTimestamp = null;
     pausedOnScroll = false;
+    isTransitioningScene = false;
+    if (transitionTimer) clearTimeout(transitionTimer);
     if (containerEl) {
       containerEl.scrollTo({ top: 0, behavior: 'auto' });
     }
@@ -508,6 +533,8 @@
 
   function closeTeleprompter() {
     pause();
+    isTransitioningScene = false;
+    if (transitionTimer) clearTimeout(transitionTimer);
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
     }
@@ -525,6 +552,7 @@
     if (isOpen) {
       currentSceneIndex = Math.min(initialSceneIndex, Math.max(0, preparedScenes.length - 1));
       elapsedSceneMs = 0;
+      isTransitioningScene = false;
       window.addEventListener('keydown', handleKeyDown);
 
       const el = containerEl;
@@ -535,6 +563,8 @@
 
       return () => {
         pause();
+        isTransitioningScene = false;
+        if (transitionTimer) clearTimeout(transitionTimer);
         window.removeEventListener('keydown', handleKeyDown);
         if (el) {
           el.removeEventListener('wheel', handleUserScroll);
@@ -543,12 +573,16 @@
       };
     } else {
       pause();
+      isTransitioningScene = false;
+      if (transitionTimer) clearTimeout(transitionTimer);
       window.removeEventListener('keydown', handleKeyDown);
     }
   });
 
   onDestroy(() => {
     pause();
+    isTransitioningScene = false;
+    if (transitionTimer) clearTimeout(transitionTimer);
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', handleKeyDown);
     }
@@ -754,6 +788,14 @@
           <p class="text-sm font-mono text-slate-300 tracking-wider">
             Look directly at the camera lens • Starting in {countdownSec}...
           </p>
+        </div>
+      {/if}
+
+      <!-- Subtle Transition Wait Indicator Between Scenes -->
+      {#if isTransitioningScene}
+        <div class="absolute top-4 z-30 px-4 py-1.5 bg-black/90 border border-cyan-400/50 rounded-full backdrop-blur-md shadow-lg flex items-center gap-2 text-xs font-mono text-cyan-300 animate-in fade-in slide-in-from-top-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          <span>Scene {currentSceneIndex + 1} readying...</span>
         </div>
       {/if}
 
