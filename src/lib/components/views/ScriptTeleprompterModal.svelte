@@ -80,6 +80,14 @@
   // Audio Follow / Voiceover synchronization state
   let audioEl = $state<HTMLAudioElement | null>(null);
   let isAudioSyncEnabled = $state(false);
+  let isAudioLoading = $state(false);
+  let sceneAudioDurations = $state<Record<number, number>>({});
+
+  function onAudioMetadataLoaded() {
+    if (audioEl && !isNaN(audioEl.duration) && audioEl.duration > 0) {
+      sceneAudioDurations[currentSceneIndex] = audioEl.duration;
+    }
+  }
 
   let hasAudioAvailable = $derived.by(() => {
     return !!script.full_audio_url || (script.clips && script.clips.some((c) => !!c.audio_url));
@@ -104,9 +112,10 @@
     if (script.clips && script.clips.length > 0) {
       return script.clips.map((clip, idx) => {
         const text = clip.spoken_dialogue || '';
-        const dur = clip.estimated_duration && clip.estimated_duration > 0
+        const exactAudioDur = sceneAudioDurations[idx] || (clip.audio_duration && clip.audio_duration > 0 ? clip.audio_duration : null);
+        const dur = exactAudioDur || (clip.estimated_duration && clip.estimated_duration > 0
           ? clip.estimated_duration
-          : estimateDurationFromText(text);
+          : estimateDurationFromText(text));
         const tokens = tokenizeSceneText(text, Math.max(3, dur));
         const words = tokens.filter(t => t.type === 'word');
         const breaths = tokens.filter(t => t.type === 'breath' || t.type === 'pause');
@@ -350,26 +359,55 @@
     }, 850);
   }
 
-  function play() {
+  async function play() {
     isPlaying = true;
     pausedOnScroll = false;
     lastTimestamp = null;
     if (animFrameId) cancelAnimationFrame(animFrameId);
-    animFrameId = requestAnimationFrame(onFrame);
 
     if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
       if (audioEl.src !== currentSceneAudioUrl) {
+        isAudioLoading = true;
         audioEl.src = currentSceneAudioUrl;
         audioEl.load();
+
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const done = () => {
+            if (!settled) {
+              settled = true;
+              audioEl?.removeEventListener('canplay', done);
+              audioEl?.removeEventListener('loadedmetadata', done);
+              audioEl?.removeEventListener('error', done);
+              resolve();
+            }
+          };
+          audioEl?.addEventListener('canplay', done);
+          audioEl?.addEventListener('loadedmetadata', done);
+          audioEl?.addEventListener('error', done);
+          setTimeout(done, 600);
+        });
+        isAudioLoading = false;
       }
+
+      if (!isPlaying) return;
+
       audioEl.currentTime = elapsedSceneMs / 1000;
       audioEl.playbackRate = playbackSpeed;
-      audioEl.play().catch((e) => console.warn('Teleprompter audio follow play error:', e));
+      try {
+        await audioEl.play();
+      } catch (e) {
+        console.warn('Audio play notice:', e);
+      }
     }
+
+    lastTimestamp = performance.now();
+    animFrameId = requestAnimationFrame(onFrame);
   }
 
   function pause() {
     isPlaying = false;
+    isAudioLoading = false;
     if (animFrameId) {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
@@ -398,17 +436,41 @@
 
   function onFrame(timestamp: number) {
     if (!isPlaying) return;
+    if (isAudioLoading) {
+      animFrameId = requestAnimationFrame(onFrame);
+      return;
+    }
+
+    if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
+      // Audio is the single master clock when playing
+      if (!audioEl.paused && !audioEl.ended) {
+        elapsedSceneMs = audioEl.currentTime * 1000;
+      }
+
+      // Check if audio has completed or reached end
+      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.05)) {
+        if (currentSceneIndex < preparedScenes.length - 1) {
+          transitionToNextScene();
+          return;
+        } else {
+          elapsedSceneMs = (audioEl.duration || activeScene.duration) * 1000;
+          pause();
+          return;
+        }
+      }
+
+      scrollToActiveWord();
+      animFrameId = requestAnimationFrame(onFrame);
+      return;
+    }
+
+    // Fallback: timer-based animation when audio sync is off or no audio available
     if (lastTimestamp === null) {
       lastTimestamp = timestamp;
     }
-
-    if (isAudioSyncEnabled && audioEl && !audioEl.paused && !audioEl.ended) {
-      elapsedSceneMs = audioEl.currentTime * 1000;
-    } else {
-      const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
-      elapsedSceneMs += deltaMs;
-    }
+    const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
     lastTimestamp = timestamp;
+    elapsedSceneMs += deltaMs;
 
     const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
@@ -416,16 +478,13 @@
         transitionToNextScene();
         return;
       } else {
-        // Script finished
         elapsedSceneMs = sceneDurationMs;
         pause();
         return;
       }
     }
 
-    // Auto-scroll to keep active word near eye-level guideline
     scrollToActiveWord();
-
     animFrameId = requestAnimationFrame(onFrame);
   }
 
@@ -437,9 +496,6 @@
     }
 
     pause();
-    currentSceneIndex++;
-    elapsedSceneMs = 0;
-    lastTimestamp = null;
     isTransitioningScene = true;
 
     // Smoothly scroll back to the top of the container
@@ -448,11 +504,24 @@
     }
 
     if (transitionTimer) clearTimeout(transitionTimer);
-    // Give 850ms for scroll to settle and eye contact to align before resuming highlighting
+
+    // Give 450ms breath pause, then switch scene and preload audio
     transitionTimer = setTimeout(() => {
-      isTransitioningScene = false;
-      play();
-    }, 850);
+      currentSceneIndex++;
+      elapsedSceneMs = 0;
+      lastTimestamp = null;
+
+      // Preload next scene audio if in audio sync mode
+      if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
+        audioEl.src = currentSceneAudioUrl;
+        audioEl.load();
+      }
+
+      setTimeout(() => {
+        isTransitioningScene = false;
+        play();
+      }, 350);
+    }, 450);
   }
 
   function scrollToActiveWord() {
@@ -645,6 +714,7 @@
   >
     <audio
       bind:this={audioEl}
+      onloadedmetadata={onAudioMetadataLoaded}
       onended={() => {
         if (isPlaying) {
           if (currentSceneIndex < preparedScenes.length - 1) {

@@ -211,7 +211,9 @@
     const downloadUrl = api.getMasterAudioDownloadUrl(script.id);
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = `${script.title.replace(/\s+/g, '_')}_master.mp3`;
+    const safeTitle = (script.title || 'script').replace(/[^a-zA-Z0-9_\- ]/g, '').replace(/\s+/g, '_');
+    a.setAttribute('download', `${safeTitle}_master.mp3`);
+    a.target = '_blank';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
