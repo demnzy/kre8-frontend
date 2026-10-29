@@ -31,7 +31,8 @@
     Zap,
     Flame,
     ArrowUpRight,
-    Lightbulb
+    Lightbulb,
+    FileText
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import { getProviderInfo } from '../../utils/aiProviders';
@@ -59,8 +60,10 @@
     observations: string[];
     patterns: string[];
     action_steps: string[];
-    limitations: string[];
+    limitations: any;
   } | null>(null);
+
+  let showReviewModal = $state(false);
 
   let isAnalyzing = $state(false);
   let isLoading = $state(false);
@@ -286,13 +289,50 @@
     if (!appState.requireApiKey()) return;
     try {
       isAnalyzing = true;
-      appState.showToast('Analyzing verified channel uploads & cadence...', 'info');
+      appState.showToast(`Analyzing channel telemetry with ${activeProvider.name}...`, 'info');
       aiReview = await api.getPerformanceReview('Last 30 Days');
+      showReviewModal = true;
       appState.showToast('Performance review complete!', 'success');
     } catch (e: any) {
       appState.showToast(e.message || 'Analysis failed', 'error');
     } finally {
       isAnalyzing = false;
+    }
+  }
+
+  async function handleSaveReportToNotes() {
+    if (!aiReview) return;
+    try {
+      const now = new Date().toLocaleDateString();
+      const content = [
+        `# Channel Performance Intelligence Report`,
+        `**Generated on:** ${now} using ${activeProvider.name}`,
+        `**Niche:** ${appState.preferences.primary_niche} • ${appState.preferences.sub_niche}`,
+        ``,
+        `## 📊 Observed Telemetry Patterns`,
+        ...(aiReview.observations || []).map((o) => `- ${o}`),
+        ``,
+        `## 🎯 Actionable Next Steps`,
+        ...(aiReview.action_steps || []).map((s) => `- [ ] ${s}`),
+        ...(aiReview.patterns && aiReview.patterns.length > 0 ? [
+          ``,
+          `## 🔍 Format & Topic Patterns`,
+          ...aiReview.patterns.map((p) => `- ${p}`)
+        ] : []),
+        ``,
+        `## ⚠️ Algorithmic Grounding Notice`,
+        `> ${typeof aiReview.limitations === 'string' ? aiReview.limitations : (Array.isArray(aiReview.limitations) ? aiReview.limitations.join(' ') : 'Data grounded in real channel telemetry.')}`
+      ].join('\n');
+
+      await api.createNote({
+        title: `Performance Audit (${now})`,
+        content,
+        is_pinned: true,
+        tags: ['Audit', 'Analytics', activeTab.toUpperCase()]
+      });
+      appState.showToast('Saved performance report to Notes!', 'success');
+    } catch (e: any) {
+      appState.showToast(e.message || 'Could not save note', 'error');
     }
   }
 
@@ -375,7 +415,17 @@
         </p>
       </div>
 
-      <div class="flex items-center gap-2.5 shrink-0">
+      <div class="flex items-center gap-2.5 shrink-0 flex-wrap">
+        {#if aiReview}
+          <button
+            onclick={() => showReviewModal = true}
+            class="flex items-center gap-2 px-3.5 py-2.5 bg-purple-950/90 hover:bg-purple-900 text-amber-300 border border-purple-700/80 text-xs font-mono font-bold tracking-wider transition-all shadow-sm"
+          >
+            <Sparkles class="w-3.5 h-3.5 text-amber-400" />
+            <span>View Full AI Report</span>
+          </button>
+        {/if}
+
         <button
           onclick={handleReviewPerformance}
           disabled={isAnalyzing}
@@ -414,6 +464,128 @@
       {/each}
     </div>
   </div>
+
+  <!-- AI Performance Intelligence Card (Visible across ALL tabs once generated) -->
+  {#if aiReview}
+    <div class="swiss-card p-6 border-2 border-amber-400/80 bg-[#140822] space-y-5 animate-in fade-in shadow-xl shadow-purple-950/50">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/60 pb-3.5">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
+            <Sparkles class="w-4 h-4" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm sm:text-base font-bold text-white font-display">
+                {activeProvider.name} Performance Intelligence
+              </h2>
+              <span class="px-2 py-0.5 bg-amber-400 text-black font-bold font-mono text-[9px] uppercase tracking-wider">
+                Active Audit
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-mono mt-0.5">
+              Grounded in live uploads & channel telemetry • {activeTab === 'all' ? 'All Channels' : activeTab.toUpperCase()}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            onclick={handleSaveReportToNotes}
+            type="button"
+            class="px-3 py-1.5 bg-purple-950 hover:bg-amber-400 hover:text-black text-amber-300 border border-purple-800 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+          >
+            <FileText class="w-3.5 h-3.5" />
+            <span>Save to Notes</span>
+          </button>
+
+          <button
+            onclick={() => showReviewModal = true}
+            type="button"
+            class="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <span>Full Comprehensive View</span>
+            <ArrowUpRight class="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onclick={() => aiReview = null}
+            title="Dismiss review"
+            class="p-1.5 text-slate-400 hover:text-white transition-colors"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Observations -->
+        <div class="p-4 bg-black/60 border border-purple-900/60 space-y-2.5">
+          <span class="swiss-tag text-amber-400 block font-bold">Observed Telemetry Patterns:</span>
+          <ul class="space-y-2 text-xs text-slate-300 font-mono">
+            {#each aiReview.observations as obs}
+              <li class="flex items-start gap-2.5 leading-relaxed">
+                <span class="text-amber-400 shrink-0 font-bold">•</span>
+                <span>{obs}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+
+        <!-- Actionable Next Steps -->
+        <div class="p-4 bg-black/60 border border-purple-900/60 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="swiss-tag text-purple-300 block font-bold">Actionable Next Steps:</span>
+            <span class="text-[10px] text-slate-500 font-mono">1-click task sync</span>
+          </div>
+          <ul class="space-y-2 text-xs text-slate-300 font-mono">
+            {#each aiReview.action_steps as step}
+              <li class="flex items-start justify-between gap-2.5 p-2.5 bg-purple-950/20 border border-purple-900/40 hover:border-amber-400/40 transition-colors">
+                <div class="flex items-start gap-2">
+                  <CheckCircle2 class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  <span class="leading-snug">{step}</span>
+                </div>
+                <button
+                  type="button"
+                  onclick={() => handleAddActionToTasks(step)}
+                  class="px-2 py-0.5 bg-purple-950 hover:bg-amber-400 hover:text-black text-amber-300 border border-purple-800 text-[10px] font-mono shrink-0 flex items-center gap-1 transition-colors"
+                >
+                  <Plus class="w-2.5 h-2.5" />
+                  <span>Add Task</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      </div>
+
+      {#if aiReview.patterns && aiReview.patterns.length > 0}
+        <div class="p-3.5 bg-black/40 border border-purple-950 space-y-1.5 font-mono text-xs">
+          <span class="text-purple-300 font-bold block text-[11px] uppercase tracking-wider">Topic & Format Spikes:</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300">
+            {#each aiReview.patterns as pattern}
+              <div class="flex items-start gap-2 text-[11px]">
+                <span class="text-purple-400 shrink-0">↳</span>
+                <span>{pattern}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <div class="p-3 bg-purple-950/20 border border-purple-900/40 text-[11px] text-slate-400 font-mono flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <ShieldAlert class="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{typeof aiReview.limitations === 'string' ? aiReview.limitations : (Array.isArray(aiReview.limitations) ? aiReview.limitations.join(' ') : 'Data grounded in real channel telemetry.')}</span>
+        </div>
+        <button
+          onclick={() => showReviewModal = true}
+          class="text-amber-400 hover:text-amber-300 underline shrink-0 font-bold"
+        >
+          Expand full audit →
+        </button>
+      </div>
+    </div>
+  {/if}
 
   <!-- TAB 1: ALL CHANNELS OVERVIEW -->
   {#if activeTab === 'all'}
@@ -455,60 +627,6 @@
         <div class="text-[10px] font-mono text-emerald-400 mt-1">Interaction velocity</div>
       </div>
     </div>
-
-    <!-- AI Review Card -->
-    {#if aiReview}
-      <div class="swiss-card p-6 border border-amber-500/40 bg-[#12071d] space-y-5 animate-in fade-in">
-        <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
-          <div class="flex items-center gap-2">
-            <Sparkles class="w-4 h-4 text-amber-400" />
-            <h2 class="text-sm font-bold text-white font-display">{activeProvider.name} Performance Intelligence</h2>
-          </div>
-          <span class="swiss-tag text-amber-400 font-mono">Data-Grounded Critique</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="p-4 bg-black/60 border border-purple-900/60 space-y-2">
-            <span class="swiss-tag text-amber-400 block font-bold">Observed Telemetry Patterns:</span>
-            <ul class="space-y-1.5 text-xs text-slate-300 font-mono">
-              {#each aiReview.observations as obs}
-                <li class="flex items-start gap-2">
-                  <span class="text-amber-400 shrink-0">•</span>
-                  <span>{obs}</span>
-                </li>
-              {/each}
-            </ul>
-          </div>
-
-          <div class="p-4 bg-black/60 border border-purple-900/60 space-y-2">
-            <span class="swiss-tag text-purple-300 block font-bold">Actionable Next Steps:</span>
-            <ul class="space-y-2 text-xs text-slate-300 font-mono">
-              {#each aiReview.action_steps as step}
-                <li class="flex items-start justify-between gap-2 p-2 bg-purple-950/20 border border-purple-900/40">
-                  <div class="flex items-start gap-2">
-                    <CheckCircle2 class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                    <span>{step}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onclick={() => handleAddActionToTasks(step)}
-                    class="px-2 py-0.5 bg-purple-950 hover:bg-amber-400 hover:text-black text-amber-300 border border-purple-800 text-[10px] font-mono shrink-0 flex items-center gap-1 transition-colors"
-                  >
-                    <Plus class="w-2.5 h-2.5" />
-                    <span>Add Task</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        </div>
-
-        <div class="p-3 bg-purple-950/20 border border-purple-900/40 text-[11px] text-slate-400 font-mono flex items-center gap-2">
-          <ShieldAlert class="w-4 h-4 text-amber-400 shrink-0" />
-          <span>{aiReview.limitations}</span>
-        </div>
-      </div>
-    {/if}
 
     <!-- Connected Platforms Matrix -->
     <div class="swiss-card p-6 border border-purple-900/60 bg-[#10071c] space-y-4">
@@ -1182,6 +1300,174 @@
           class="px-5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-mono transition-colors"
         >
           {editingAccountId ? 'Save Stats' : 'Connect Channel'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Comprehensive Performance Review Intelligence Modal -->
+{#if showReviewModal && aiReview}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in overflow-y-auto">
+    <div class="swiss-card w-full max-w-3xl max-h-[90vh] flex flex-col border-2 border-amber-400/70 bg-[#12071f] shadow-2xl overflow-hidden my-auto">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between p-5 border-b border-purple-900/60 bg-[#170a27] shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded bg-amber-400/10 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
+            <Sparkles class="w-4 h-4" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base sm:text-lg font-bold text-white font-display">
+                Channel Performance Audit
+              </h3>
+              <span class="px-2 py-0.5 bg-amber-400 text-black font-bold font-mono text-[9px] uppercase tracking-wider">
+                {activeProvider.name}
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 font-mono mt-0.5">
+              Comprehensive report grounded in verified telemetry across your channels
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            onclick={handleSaveReportToNotes}
+            type="button"
+            class="px-3 py-1.5 bg-purple-950 hover:bg-amber-400 hover:text-black text-amber-300 border border-purple-800 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+            title="Save to Notes"
+          >
+            <FileText class="w-3.5 h-3.5" />
+            <span class="hidden sm:inline">Save to Notes</span>
+          </button>
+          <button
+            onclick={() => showReviewModal = false}
+            class="p-1.5 text-slate-400 hover:text-white transition-colors"
+            aria-label="Close modal"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-5 sm:p-6 space-y-6 overflow-y-auto font-mono text-xs text-slate-300">
+        <!-- Quick Stats Scorecard -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-black/60 border border-purple-900/70">
+          <div>
+            <span class="text-[10px] text-slate-400 block uppercase">Total Reach</span>
+            <span class="text-lg font-bold text-amber-400 font-display">{formatCount(summary.total_followers)}</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block uppercase">Tracked Views</span>
+            <span class="text-lg font-bold text-white font-display">{formatCount(summary.total_views)}</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block uppercase">Active Niche</span>
+            <span class="text-xs font-bold text-purple-300 truncate block mt-1">{appState.preferences.primary_niche}</span>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 block uppercase">Engagement</span>
+            <span class="text-lg font-bold text-emerald-400 font-display">{summary.engagement_rate}%</span>
+          </div>
+        </div>
+
+        <!-- Section 1: Observations -->
+        <div class="space-y-2.5">
+          <div class="flex items-center gap-2 text-amber-400 font-bold uppercase tracking-wider text-xs">
+            <Eye class="w-4 h-4" />
+            <span>Observed Telemetry Patterns</span>
+          </div>
+          <div class="grid grid-cols-1 gap-2.5">
+            {#each aiReview.observations as obs}
+              <div class="p-3.5 bg-purple-950/20 border border-purple-900/50 flex items-start gap-3 leading-relaxed">
+                <span class="text-amber-400 shrink-0 font-bold mt-0.5">•</span>
+                <span class="text-slate-200">{obs}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Section 2: Topic & Format Patterns (if available) -->
+        {#if aiReview.patterns && aiReview.patterns.length > 0}
+          <div class="space-y-2.5">
+            <div class="flex items-center gap-2 text-purple-300 font-bold uppercase tracking-wider text-xs">
+              <TrendingUp class="w-4 h-4" />
+              <span>Format & Topic Distribution Patterns</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2">
+              {#each aiReview.patterns as pattern}
+                <div class="p-3 bg-black/50 border border-purple-950 flex items-start gap-2.5 leading-relaxed">
+                  <span class="text-purple-400 shrink-0 font-bold">↳</span>
+                  <span class="text-slate-300">{pattern}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Section 3: Actionable Next Steps -->
+        <div class="space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-amber-400 font-bold uppercase tracking-wider text-xs">
+              <CheckCircle2 class="w-4 h-4 text-emerald-400" />
+              <span>Actionable Next Steps</span>
+            </div>
+            <span class="text-[10px] text-slate-400">Syncs directly to Task Manager</span>
+          </div>
+          <div class="space-y-2.5">
+            {#each aiReview.action_steps as step, idx}
+              <div class="p-3.5 bg-black/70 border border-purple-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-amber-400/50 transition-colors">
+                <div class="flex items-start gap-2.5">
+                  <span class="w-5 h-5 rounded-full bg-amber-400/10 text-amber-400 border border-amber-400/30 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                    {idx + 1}
+                  </span>
+                  <p class="text-slate-200 leading-snug">{step}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onclick={() => handleAddActionToTasks(step)}
+                    class="px-3 py-1.5 bg-purple-950 hover:bg-amber-400 hover:text-black text-amber-300 border border-purple-800 text-[11px] font-bold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Plus class="w-3 h-3" />
+                    <span>Add Task</span>
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Section 4: Grounding & Limitations -->
+        <div class="p-3.5 bg-purple-950/20 border border-purple-900/50 flex items-start gap-3 text-slate-400 text-[11px] leading-relaxed">
+          <ShieldAlert class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <span class="font-bold text-slate-300 block mb-0.5">Data Grounding Notice</span>
+            <span>{typeof aiReview.limitations === 'string' ? aiReview.limitations : (Array.isArray(aiReview.limitations) ? aiReview.limitations.join(' ') : 'Metrics reflect verified public platform feeds and recent uploads.')}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-purple-900/60 bg-[#170a27] flex items-center justify-between shrink-0">
+        <button
+          onclick={handleReviewPerformance}
+          disabled={isAnalyzing}
+          type="button"
+          class="px-3.5 py-2 bg-purple-950 hover:bg-purple-900 text-amber-300 border border-purple-800 text-xs font-mono font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw class="w-3.5 h-3.5 {isAnalyzing ? 'animate-spin' : ''}" />
+          <span>{isAnalyzing ? 'Re-analyzing...' : 'Refresh Audit'}</span>
+        </button>
+
+        <button
+          onclick={() => showReviewModal = false}
+          type="button"
+          class="px-6 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider transition-colors"
+        >
+          Close
         </button>
       </div>
     </div>
