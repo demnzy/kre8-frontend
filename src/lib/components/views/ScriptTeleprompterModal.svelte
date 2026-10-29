@@ -82,6 +82,7 @@
   let isAudioSyncEnabled = $state(true);
   let isAudioLoading = $state(false);
   let sceneAudioDurations = $state<Record<number, number>>({});
+  let audioBlobUrls = $state<Record<number, string>>({});
 
   function onAudioMetadataLoaded() {
     if (audioEl && !isNaN(audioEl.duration) && audioEl.duration > 0) {
@@ -93,7 +94,34 @@
     return !!script.full_audio_url || (script.clips && script.clips.some((c) => !!c.audio_url));
   });
 
+  // Background in-memory blob preloader for zero-latency instant playback
+  $effect(() => {
+    if (script.clips && script.clips.length > 0) {
+      script.clips.forEach((clip, idx) => {
+        if (clip.audio_url && !audioBlobUrls[idx]) {
+          const fullUrl = api.getAudioUrl(clip.audio_url);
+          fetch(fullUrl)
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.blob();
+            })
+            .then(blob => {
+              const blobUrl = URL.createObjectURL(blob);
+              audioBlobUrls[idx] = blobUrl;
+            })
+            .catch(() => {
+              // Silently falls back to streaming URL
+            });
+        }
+      });
+    }
+  });
+
   let currentSceneAudioUrl = $derived.by(() => {
+    // Prefer zero-latency in-memory blob URL if available
+    if (audioBlobUrls[currentSceneIndex]) {
+      return audioBlobUrls[currentSceneIndex];
+    }
     const clip = script.clips?.[currentSceneIndex];
     if (clip?.audio_url) {
       return api.getAudioUrl(clip.audio_url);
@@ -104,7 +132,7 @@
   // Keep audio src proactively updated so playback is zero-latency instant
   $effect(() => {
     if (audioEl && currentSceneAudioUrl) {
-      if (!audioEl.src.endsWith(currentSceneAudioUrl)) {
+      if (audioEl.src !== currentSceneAudioUrl && !audioEl.src.endsWith(currentSceneAudioUrl)) {
         audioEl.src = currentSceneAudioUrl;
       }
     }
@@ -417,14 +445,25 @@
   function onFrame(timestamp: number) {
     if (!isPlaying) return;
 
+    if (lastTimestamp === null) {
+      lastTimestamp = timestamp;
+    }
+    const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
+    lastTimestamp = timestamp;
+
+    const sceneDurationMs = (activeScene?.duration || 10) * 1000;
+
     if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
-      // Audio is the single master clock when playing
+      // Audio is the master clock when actively playing sound
       if (!audioEl.paused && !audioEl.ended) {
         elapsedSceneMs = audioEl.currentTime * 1000;
+      } else {
+        // Audio is buffering or preparing: keep teleprompter moving smoothly with 0 stutter
+        elapsedSceneMs += deltaMs;
       }
 
-      // Check if audio has completed or reached end
-      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.04)) {
+      // Check if scene has completed
+      if (audioEl.ended || (audioEl.duration && audioEl.currentTime >= audioEl.duration - 0.04) || elapsedSceneMs >= sceneDurationMs) {
         if (currentSceneIndex < preparedScenes.length - 1) {
           transitionToNextScene();
           return;
@@ -441,14 +480,8 @@
     }
 
     // Fallback: timer-based animation when audio sync is off or no audio available
-    if (lastTimestamp === null) {
-      lastTimestamp = timestamp;
-    }
-    const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
-    lastTimestamp = timestamp;
     elapsedSceneMs += deltaMs;
 
-    const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
       if (currentSceneIndex < preparedScenes.length - 1) {
         transitionToNextScene();
@@ -480,8 +513,7 @@
     }
 
     if (isAudioSyncEnabled && audioEl) {
-      const nextClip = script.clips?.[currentSceneIndex];
-      const nextAudioUrl = nextClip?.audio_url ? api.getAudioUrl(nextClip.audio_url) : null;
+      const nextAudioUrl = audioBlobUrls[currentSceneIndex] || (script.clips?.[currentSceneIndex]?.audio_url ? api.getAudioUrl(script.clips[currentSceneIndex].audio_url) : null);
       if (nextAudioUrl) {
         audioEl.src = nextAudioUrl;
         audioEl.currentTime = 0;
@@ -674,6 +706,12 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', handleKeyDown);
     }
+    // Revoke memory blob URLs
+    Object.values(audioBlobUrls).forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (e) {}
+    });
   });
 </script>
 
