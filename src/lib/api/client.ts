@@ -31,8 +31,12 @@ import type {
 } from '../types';
 import { connection } from '../stores/connection.svelte';
 
-// Relative by default so requests go through the Vite dev proxy (works on localhost, 127.0.0.1, or LAN)
-const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/api';
+// Relative by default so requests go through the Vite dev proxy; supports full URLs in production (e.g. Vercel)
+function resolveApiBase(): string {
+  const envBase = (import.meta.env.VITE_API_BASE ?? '/api').trim();
+  return envBase.replace(/\/+$/, '');
+}
+const API_BASE: string = resolveApiBase();
 const TOKEN_KEY = 'kre8_token';
 const DEFAULT_TIMEOUT_MS = 20_000;
 const AI_TIMEOUT_MS = 90_000;
@@ -107,7 +111,8 @@ export const authStorage = {
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, retries, ...init } = options;
-  const url = `${API_BASE}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE}${cleanEndpoint}`;
   const method = (init.method ?? 'GET').toUpperCase();
   // Only retry idempotent reads automatically
   const maxRetries = retries ?? (method === 'GET' ? 2 : 0);
