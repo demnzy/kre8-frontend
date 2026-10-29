@@ -61,11 +61,27 @@
   });
 
   let showKeyPassword = $state(false);
-  let showNewsKeyPassword = $state(false);
   let isSaving = $state(false);
-  let isSavingNewsKey = $state(false);
+  let isSavingNewsRegion = $state(false);
   let isResetting = $state(false);
   let isDemoLoading = $state(false);
+
+  const regionLabels: Record<string, string> = {
+    GLOBAL: 'Global',
+    NG: 'Nigeria',
+    US: 'United States',
+    UK: 'United Kingdom',
+    CA: 'Canada',
+    IN: 'India',
+    ZA: 'South Africa',
+    KE: 'Kenya',
+    EU: 'Europe'
+  };
+
+  function getRegionLabel(code?: string): string {
+    if (!code) return 'Global';
+    return regionLabels[code.toUpperCase()] || code;
+  }
 
   // Live AI Diagnostics & Playground State
   let isTestingAI = $state(false);
@@ -94,13 +110,6 @@
     getSavedKeyForProvider(appState.preferences, currentProvider.id)
   );
 
-  let currentNewsKeyInput = $derived(
-    ((prefs.news_api_key as string) || '').trim()
-  );
-
-  let savedNewsKeyInStore = $derived(
-    ((appState.preferences?.news_api_key as string) || '').trim()
-  );
 
   async function loadPreferences() {
     loadError = null;
@@ -151,23 +160,19 @@
     }
   }
 
-  async function handleSaveNewsKey() {
-    const trimmed = currentNewsKeyInput;
-    if (!trimmed) {
-      appState.showToast('Please enter your NewsAPI key first.', 'error');
-      return;
-    }
+  async function handleSaveNewsRegion(regionValue?: string) {
+    const val = (regionValue || prefs.news_region || 'GLOBAL').toUpperCase();
     try {
-      isSavingNewsKey = true;
-      prefs.news_api_key = trimmed;
+      isSavingNewsRegion = true;
+      prefs.news_region = val;
       const updated = await api.updatePreferences(prefs);
       prefs = updated;
       appState.preferences = updated;
-      appState.showToast('NewsAPI key saved to your account!', 'success');
+      appState.showToast(`Saved default news region to ${getRegionLabel(val)}!`, 'success');
     } catch (e: any) {
-      appState.showToast(e.message || 'Failed to save News key', 'error');
+      appState.showToast(e.message || 'Failed to save news region', 'error');
     } finally {
-      isSavingNewsKey = false;
+      isSavingNewsRegion = false;
     }
   }
 
@@ -385,117 +390,62 @@
       </div>
     </div>
 
-    <!-- Live News Feeds & NewsAPI Configuration -->
+    <!-- Geographic News Region Selection -->
     <div class="swiss-card p-6 border border-purple-900/50 bg-[#10071c] space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
         <div>
           <div class="flex items-center gap-2">
             <Radio class="w-4 h-4 text-amber-400" />
-            <h2 class="text-sm font-bold text-white font-display">News Sources & NewsAPI Key (Optional)</h2>
+            <h2 class="text-sm font-bold text-white font-display">News Geographic Region</h2>
           </div>
           <p class="text-xs text-slate-400 mt-1">
-            Configure how Kre8 discovers breaking stories in your niche.
+            Choose your default country for trending news, localized stories, and AI angle synthesis.
           </p>
         </div>
-
-        <a
-          href="https://newsapi.org/register"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-[11px] font-mono text-amber-400/90 hover:text-amber-300 flex items-center gap-1 self-start sm:self-auto"
-        >
-          <span>Get Free Key from NewsAPI.org</span>
-          <ExternalLink class="w-3 h-3" />
-        </a>
       </div>
 
       <div class="space-y-4">
-        <!-- Default Geographic News Region -->
         <div>
           <label for="swiss-news-region" class="block swiss-tag text-slate-400 mb-1">
             Default Geographic News Region
           </label>
-          <select
-            id="swiss-news-region"
-            bind:value={prefs.news_region}
-            class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400 cursor-pointer"
-          >
-            <option value="GLOBAL">Global</option>
-            <option value="NG">Nigeria</option>
-            <option value="US">United States</option>
-            <option value="UK">United Kingdom</option>
-            <option value="CA">Canada</option>
-            <option value="IN">India</option>
-            <option value="ZA">South Africa</option>
-            <option value="KE">Kenya</option>
-            <option value="EU">Europe</option>
-          </select>
-          <span class="text-[10px] font-mono text-slate-500 mt-1 block">
-            Sets the default regional feed in the Discover tab. You can also switch regions instantly on the fly.
-          </span>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <label for="swiss-news-api-key" class="swiss-tag text-slate-400">
-              News API Key (NewsAPI.org, GNews.io, or NewsData.io)
-            </label>
-            <span class="text-[10px] font-mono text-slate-500">Optional key</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <div class="relative flex-1 flex items-center">
-              <input
-                id="swiss-news-api-key"
-                type={showNewsKeyPassword ? 'text' : 'password'}
-                bind:value={prefs.news_api_key}
-                placeholder="Paste your NewsAPI.org, GNews.io, or NewsData.io key..."
-                class="w-full pl-3.5 pr-10 py-2 bg-black border border-purple-900 text-amber-300 text-xs font-mono focus:border-amber-400"
-              />
-              <button
-                type="button"
-                onclick={() => (showNewsKeyPassword = !showNewsKeyPassword)}
-                class="absolute right-2.5 text-slate-400 hover:text-white"
-                title={showNewsKeyPassword ? 'Hide key' : 'Show key'}
-              >
-                {#if showNewsKeyPassword}
-                  <EyeOff class="w-3.5 h-3.5" />
-                {:else}
-                  <Eye class="w-3.5 h-3.5" />
-                {/if}
-              </button>
-            </div>
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <select
+              id="swiss-news-region"
+              bind:value={prefs.news_region}
+              onchange={(e) => handleSaveNewsRegion(e.currentTarget.value)}
+              class="flex-1 px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400 cursor-pointer"
+            >
+              <option value="GLOBAL">Global</option>
+              <option value="NG">Nigeria</option>
+              <option value="US">United States</option>
+              <option value="UK">United Kingdom</option>
+              <option value="CA">Canada</option>
+              <option value="IN">India</option>
+              <option value="ZA">South Africa</option>
+              <option value="KE">Kenya</option>
+              <option value="EU">Europe</option>
+            </select>
 
             <button
               type="button"
-              onclick={handleSaveNewsKey}
-              disabled={isSavingNewsKey || !currentNewsKeyInput || (savedNewsKeyInStore === currentNewsKeyInput)}
-              class="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider shrink-0 flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+              onclick={() => handleSaveNewsRegion(prefs.news_region)}
+              disabled={isSavingNewsRegion}
+              class="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold font-display tracking-wider shrink-0 flex items-center justify-center gap-1.5 disabled:opacity-50 transition-colors"
             >
               <Save class="w-3.5 h-3.5" />
-              <span>{isSavingNewsKey ? 'Saving...' : savedNewsKeyInStore === currentNewsKeyInput && savedNewsKeyInStore ? 'Saved' : 'Save News Key'}</span>
+              <span>{isSavingNewsRegion ? 'Saving...' : 'Save Region'}</span>
             </button>
           </div>
+          <span class="text-[10px] font-mono text-slate-500 mt-1 block">
+            Saved across all logins and reloads. Changing the region in the Discover toolbar also auto-saves immediately.
+          </span>
         </div>
 
-        {#if savedNewsKeyInStore && savedNewsKeyInStore === currentNewsKeyInput}
-          <div class="p-3 bg-emerald-950/30 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
-            <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Commercial News API key active. Blending live API wire feeds with localized Google News and curated regional publications.</span>
-          </div>
-        {:else if currentNewsKeyInput}
-          <div class="p-3 bg-amber-950/30 border border-amber-500/40 text-[11px] font-mono text-amber-300 flex items-center gap-2">
-            <Key class="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Unsaved changes — click <strong>Save News Key</strong> so your key is saved and used when you next sign in.</span>
-          </div>
-        {:else}
-          <div class="p-3 bg-black/60 border border-purple-900/60 text-[11px] font-mono text-slate-300 space-y-1">
-            <div class="text-amber-400 font-bold">Standard Diverse & Localized Feeds Active (No key required)</div>
-            <p class="text-slate-400 leading-relaxed">
-              Kre8 automatically pulls real-time verified stories via localized Google News RSS and authoritative direct feeds (TechCabal, Techpoint, Rest of World, Tubefilter, Digiday, Sifted, YourStory, TechCrunch, The Verge, CNBC, ScienceDaily) based on your chosen region and niche. Adding a third-party key is completely optional.
-            </p>
-          </div>
-        {/if}
+        <div class="p-3 bg-emerald-950/20 border border-emerald-500/30 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
+          <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>Active news engine configured on the backend. Pulling live stories from commercial news APIs, localized Google News, and direct regional publications.</span>
+        </div>
       </div>
     </div>
 

@@ -143,11 +143,17 @@
     }
   }
 
-  function handleSelectRegion(code: string) {
+  async function handleSelectRegion(code: string) {
     if (selectedRegion === code) return;
     selectedRegion = code;
     selectedSource = 'All';
     loadDailyNews(false);
+    try {
+      const updated = await api.updatePreferences({ news_region: code });
+      appState.preferences = updated;
+    } catch (e) {
+      console.warn('Failed to auto-persist region preference:', e);
+    }
   }
 
   function handleSelectCategory(catId: string) {
