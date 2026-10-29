@@ -60,12 +60,13 @@
 
   let currentSceneIndex = $state(0);
   let isPlaying = $state(false);
-  let playbackSpeed = $state(1.0); // 0.8, 1.0, 1.25, 1.5
+  let playbackSpeed = $state(1.0); // 0.5 to 2.0 with 0.05 granular steps
   let fontSize = $state<'md' | 'lg' | 'xl' | '2xl'>('xl');
   let isMirrored = $state(false);
   let isFullscreen = $state(false);
   let showEyeGuide = $state(true);
   let showBreathMarkers = $state(true);
+  let pausedOnScroll = $state(false);
   let countdownSec = $state<number | null>(null);
   let elapsedSceneMs = $state(0);
 
@@ -147,22 +148,6 @@
       priorSec += preparedScenes[i]?.duration || 0;
     }
     return priorSec + (elapsedSceneMs / 1000);
-  });
-
-  // Find currently active token (word, breath, or pause)
-  let activeToken = $derived.by<Token | null>(() => {
-    if (!activeScene) return null;
-    const currentSec = elapsedSceneMs / 1000;
-    for (const token of activeScene.tokens) {
-      if (token.startTime !== undefined && token.endTime !== undefined) {
-        if (currentSec >= token.startTime && currentSec < token.endTime) {
-          return token;
-        }
-      }
-    }
-    // If at end of scene, return last timed token
-    const timed = activeScene.tokens.filter(t => t.endTime !== undefined);
-    return timed.length > 0 ? timed[timed.length - 1] : null;
   });
 
   function estimateDurationFromText(text: string): number {
@@ -342,6 +327,7 @@
 
   function play() {
     isPlaying = true;
+    pausedOnScroll = false;
     lastTimestamp = null;
     if (animFrameId) cancelAnimationFrame(animFrameId);
     animFrameId = requestAnimationFrame(onFrame);
@@ -356,6 +342,7 @@
   }
 
   function togglePlayPause() {
+    pausedOnScroll = false;
     if (countdownSec !== null) {
       countdownSec = null;
       return;
@@ -383,11 +370,14 @@
 
     const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
-      // Advance to next scene
+      // Advance to next scene with breather
       if (currentSceneIndex < preparedScenes.length - 1) {
+        pause();
         currentSceneIndex++;
-        elapsedSceneMs = 0;
-        lastTimestamp = timestamp;
+        restartScene();
+        // Give 3-second countdown for the next scene so speaker can read and see the screen first
+        startCountdownAndPlay();
+        return;
       } else {
         // Script finished
         elapsedSceneMs = sceneDurationMs;
@@ -419,13 +409,18 @@
   }
 
   function restartScene() {
+    pause(); // Always pause when restarting/switching so highlighter doesn't run off-screen
     elapsedSceneMs = 0;
     lastTimestamp = null;
-    if (containerEl) containerEl.scrollTo({ top: 0, behavior: 'smooth' });
+    pausedOnScroll = false;
+    if (containerEl) {
+      containerEl.scrollTo({ top: 0, behavior: 'auto' });
+    }
   }
 
   function nextScene() {
     if (currentSceneIndex < preparedScenes.length - 1) {
+      pause();
       currentSceneIndex++;
       restartScene();
     }
@@ -433,6 +428,7 @@
 
   function prevScene() {
     if (currentSceneIndex > 0) {
+      pause();
       currentSceneIndex--;
       restartScene();
     }
@@ -440,8 +436,26 @@
 
   function jumpToScene(idx: number) {
     if (idx >= 0 && idx < preparedScenes.length) {
+      pause();
       currentSceneIndex = idx;
       restartScene();
+    }
+  }
+
+  // When user wheels or touches to manually scroll, pause auto-play immediately
+  function handleUserScroll() {
+    if (isPlaying) {
+      pause();
+      pausedOnScroll = true;
+    }
+  }
+
+  // Jump playback directly to clicked word
+  function seekToWord(token: Token) {
+    if (token.startTime !== undefined) {
+      elapsedSceneMs = token.startTime * 1000;
+      pausedOnScroll = false;
+      scrollToActiveWord();
     }
   }
 
@@ -476,6 +490,12 @@
     } else if (e.key === 'b' || e.key === 'B') {
       e.preventDefault();
       showBreathMarkers = !showBreathMarkers;
+    } else if (e.key === '[' || e.key === '-') {
+      e.preventDefault();
+      playbackSpeed = Math.max(0.5, Number((playbackSpeed - 0.05).toFixed(2)));
+    } else if (e.key === ']' || e.key === '=' || e.key === '+') {
+      e.preventDefault();
+      playbackSpeed = Math.min(2.0, Number((playbackSpeed + 0.05).toFixed(2)));
     } else if (e.key === 'Escape') {
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
@@ -506,14 +526,25 @@
       currentSceneIndex = Math.min(initialSceneIndex, Math.max(0, preparedScenes.length - 1));
       elapsedSceneMs = 0;
       window.addEventListener('keydown', handleKeyDown);
+
+      const el = containerEl;
+      if (el) {
+        el.addEventListener('wheel', handleUserScroll, { passive: true });
+        el.addEventListener('touchmove', handleUserScroll, { passive: true });
+      }
+
+      return () => {
+        pause();
+        window.removeEventListener('keydown', handleKeyDown);
+        if (el) {
+          el.removeEventListener('wheel', handleUserScroll);
+          el.removeEventListener('touchmove', handleUserScroll);
+        }
+      };
     } else {
       pause();
       window.removeEventListener('keydown', handleKeyDown);
     }
-    return () => {
-      pause();
-      window.removeEventListener('keydown', handleKeyDown);
-    };
   });
 
   onDestroy(() => {
@@ -576,8 +607,40 @@
         </span>
       </div>
 
-      <!-- Right: Minimalist Controls -->
-      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <!-- Right: Granular Speed Slider & Minimalist Controls -->
+      <div class="flex items-center gap-2 shrink-0">
+        <!-- Granular Speed Slider (0.50x to 2.00x) -->
+        <div class="flex items-center gap-1.5 px-2 py-1 bg-black border border-purple-900/60 rounded text-xs font-mono" title={`Playback Speed: ${playbackSpeed.toFixed(2)}x (~${Math.round(135 * playbackSpeed)} WPM)`}>
+          <Gauge class="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <button
+            type="button"
+            onclick={() => (playbackSpeed = Math.max(0.5, Number((playbackSpeed - 0.05).toFixed(2))))}
+            class="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-white font-bold leading-none"
+            title="Slower by -0.05x (Key: [)"
+          >
+            -
+          </button>
+          <input
+            type="range"
+            min="0.5"
+            max="2.0"
+            step="0.05"
+            bind:value={playbackSpeed}
+            class="w-14 sm:w-20 h-1 accent-amber-400 bg-purple-950 rounded cursor-pointer"
+          />
+          <button
+            type="button"
+            onclick={() => (playbackSpeed = Math.min(2.0, Number((playbackSpeed + 0.05).toFixed(2))))}
+            class="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-white font-bold leading-none"
+            title="Faster by +0.05x (Key: ])"
+          >
+            +
+          </button>
+          <span class="text-[10px] font-bold text-amber-300 w-9 text-right font-mono">
+            {playbackSpeed.toFixed(2)}x
+          </span>
+        </div>
+
         <!-- Natural Breaths Toggle -->
         <button
           type="button"
@@ -608,21 +671,6 @@
             <EyeOff class="w-3.5 h-3.5" />
           {/if}
         </button>
-
-        <!-- Playback Speed -->
-        <div class="flex items-center bg-black border border-purple-900/60 rounded px-1 py-0.5 text-xs font-mono">
-          {#each [0.8, 1.0, 1.25, 1.5] as spd}
-            <button
-              type="button"
-              onclick={() => (playbackSpeed = spd)}
-              class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors {playbackSpeed === spd
-                ? 'bg-amber-400 text-black font-bold'
-                : 'text-slate-400 hover:text-white'}"
-            >
-              {spd}x
-            </button>
-          {/each}
-        </div>
 
         <!-- Typography Size -->
         <div class="hidden sm:flex items-center bg-black border border-purple-900/60 rounded px-1 py-0.5 text-xs font-mono">
@@ -709,10 +757,18 @@
         </div>
       {/if}
 
-      <!-- Scrollable Text Channel -->
+      <!-- Paused on Scroll Notification Banner -->
+      {#if pausedOnScroll}
+        <div class="absolute top-4 z-30 px-4 py-1.5 bg-purple-950/90 border border-amber-400/40 rounded-full backdrop-blur-md shadow-lg flex items-center gap-2 text-xs font-mono text-amber-300 animate-in fade-in slide-in-from-top-2">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Playback paused on scroll • Press Space or Play to resume</span>
+        </div>
+      {/if}
+
+      <!-- Scrollable Text Channel (Auto-pauses when user scrolls) -->
       <div
         bind:this={containerEl}
-        class="w-full h-full overflow-y-auto px-6 sm:px-12 lg:px-20 pt-44 pb-64 {isMirrored ? 'scale-x-[-1]' : ''}"
+        class="w-full h-full overflow-y-auto px-6 sm:px-12 lg:px-20 pt-44 pb-64 focus:outline-none {isMirrored ? 'scale-x-[-1]' : ''}"
       >
         <div class="max-w-3xl mx-auto space-y-6">
           <!-- Spoken Dialogue & Paced Breath Tokens -->
@@ -738,37 +794,42 @@
                 {@const isPast = (token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.endTime)}
                 {@const isCurrent = (token.startTime !== undefined && token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.startTime && (elapsedSceneMs / 1000) < token.endTime)}
                 
-                <span
+                <button
+                  type="button"
                   id={isCurrent ? 'teleprompter-current-target' : undefined}
-                  class="inline-block transition-all duration-100 mr-2 rounded {
+                  onclick={() => seekToWord(token)}
+                  class="inline-block text-left transition-all duration-100 mr-2 rounded cursor-pointer {
                     isCurrent
                       ? 'bg-amber-400 text-black font-extrabold px-1.5 py-0.5 shadow-lg ring-2 ring-amber-300 scale-105'
                       : isPast
-                      ? 'text-white/85 font-medium'
-                      : 'text-slate-500/50 font-normal'
+                      ? 'text-white/85 font-medium hover:text-amber-300'
+                      : 'text-slate-500/50 font-normal hover:text-slate-300'
                   } {token.isBold ? 'font-bold underline decoration-amber-400/50 decoration-2' : ''} {token.isItalic ? 'italic' : ''}"
+                  title="Click to jump prompter to this word"
                 >
                   {token.text}
-                </span>
+                </button>
               {:else if token.type === 'breath' || token.type === 'pause'}
                 {@const isPast = (token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.endTime)}
                 {@const isCurrent = (token.startTime !== undefined && token.endTime !== undefined) && ((elapsedSceneMs / 1000) >= token.startTime && (elapsedSceneMs / 1000) < token.endTime)}
 
                 {#if showBreathMarkers && (token.breathType === 'sentence' || token.breathType === 'paragraph' || token.breathType === 'beat')}
-                  <span
+                  <button
+                    type="button"
                     id={isCurrent ? 'teleprompter-current-target' : undefined}
-                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-mono transition-all duration-150 mr-2 align-middle {
+                    onclick={() => seekToWord(token)}
+                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-mono transition-all duration-150 mr-2 align-middle cursor-pointer {
                       isCurrent
                         ? 'bg-cyan-400 text-black font-bold ring-2 ring-cyan-300 scale-110 shadow-lg'
                         : isPast
-                        ? 'text-slate-600/50 opacity-30'
-                        : 'text-cyan-400/60 bg-cyan-950/20 border border-cyan-800/40 opacity-70'
+                        ? 'text-slate-600/50 opacity-30 hover:opacity-80'
+                        : 'text-cyan-400/60 bg-cyan-950/20 border border-cyan-800/40 opacity-70 hover:opacity-100'
                     }"
                     title={token.breathType === 'beat' ? 'Pause beat' : 'Natural breath pause'}
                   >
                     <Wind class="w-3 h-3 {isCurrent ? 'animate-pulse' : ''}" />
                     <span>{isCurrent ? 'inhale' : (token.breathType === 'beat' ? 'beat' : 'breath')}</span>
-                  </span>
+                  </button>
                 {/if}
               {/if}
             {/each}
