@@ -96,16 +96,17 @@
 </script>
 
 {#if appState.quickCaptureOpen}
-  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+  <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/80 backdrop-blur-sm animate-in fade-in">
     <!-- Click backdrop to close -->
     <button
       type="button"
       onclick={() => (appState.quickCaptureOpen = false)}
-      class="absolute inset-0 cursor-default"
+      class="fixed inset-0 cursor-default"
       aria-label="Close modal"
+      tabindex="-1"
     ></button>
 
-    <div class="relative w-full max-w-lg swiss-card border border-purple-800 bg-[#10071c] shadow-2xl overflow-hidden z-10 space-y-4 p-6">
+    <div class="relative w-full max-w-lg swiss-card border border-purple-800 bg-[#10071c] shadow-2xl overflow-hidden z-10 space-y-4 p-6 modal-spring">
       <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-purple-900/40 pb-3">
         <div class="flex items-center gap-2">

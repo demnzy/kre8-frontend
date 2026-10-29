@@ -1075,8 +1075,16 @@
 
 <!-- Modal: Connect Channel / Platform-Semantic Stats -->
 {#if showModal}
-  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-    <div class="swiss-card w-full max-w-lg p-6 border border-amber-400/60 bg-[#12071f] space-y-5 shadow-2xl">
+  <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/80 backdrop-blur-sm animate-in fade-in">
+    <button
+      type="button"
+      onclick={() => (showModal = false)}
+      class="fixed inset-0 cursor-default"
+      aria-label="Close modal"
+      tabindex="-1"
+    ></button>
+
+    <div class="relative w-full max-w-lg p-6 swiss-card border border-amber-400/60 bg-[#12071f] space-y-5 shadow-2xl z-10 modal-spring">
       <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
         <div class="flex items-center gap-2">
           <BarChart3 class="w-4 h-4 text-amber-400" />
@@ -1309,8 +1317,16 @@
 
 <!-- Comprehensive Performance Review Intelligence Modal -->
 {#if showReviewModal && aiReview}
-  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in overflow-y-auto">
-    <div class="swiss-card w-full max-w-3xl max-h-[90vh] flex flex-col border-2 border-amber-400/70 bg-[#12071f] shadow-2xl overflow-hidden my-auto">
+  <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 sm:p-6 pt-6 sm:pt-10 pb-16 bg-black/85 backdrop-blur-md animate-in fade-in">
+    <button
+      type="button"
+      onclick={() => (showReviewModal = false)}
+      class="fixed inset-0 cursor-default"
+      aria-label="Close modal"
+      tabindex="-1"
+    ></button>
+
+    <div class="relative w-full max-w-3xl max-h-[90vh] flex flex-col border-2 border-amber-400/70 bg-[#12071f] shadow-2xl overflow-hidden z-10 modal-spring">
       <!-- Modal Header -->
       <div class="flex items-center justify-between p-5 border-b border-purple-900/60 bg-[#170a27] shrink-0">
         <div class="flex items-center gap-3">

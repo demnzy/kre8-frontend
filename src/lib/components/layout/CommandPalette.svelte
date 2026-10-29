@@ -94,13 +94,14 @@
 </script>
 
 {#if appState.commandPaletteOpen}
-  <div use:portal class="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+  <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center pt-20 sm:pt-24 pb-16 p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
     <!-- Click backdrop to close -->
     <button
       type="button"
       onclick={() => (appState.commandPaletteOpen = false)}
-      class="absolute inset-0 cursor-default"
+      class="fixed inset-0 cursor-default"
       aria-label="Close search"
+      tabindex="-1"
     ></button>
 
     <div class="relative w-full max-w-lg rounded-xl border border-purple-800/80 bg-[#10071c] shadow-2xl overflow-hidden z-10 flex flex-col">

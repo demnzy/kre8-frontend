@@ -424,12 +424,13 @@
 
   <!-- Schedule / Edit Event Modal -->
   {#if showModal}
-    <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <button
         type="button"
         onclick={() => (showModal = false)}
-        class="absolute inset-0 cursor-default"
+        class="fixed inset-0 cursor-default"
         aria-label="Close modal"
+        tabindex="-1"
       ></button>
 
       <div class="relative w-full max-w-md bg-[#11081d] border border-purple-800/40 rounded-2xl p-6 space-y-4 shadow-2xl z-10 modal-spring">

@@ -394,13 +394,14 @@
 </script>
 
 {#if appState.authModalOpen}
-  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+  <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
     <!-- Click backdrop to close -->
     <button
       type="button"
       onclick={() => (appState.authModalOpen = false)}
-      class="absolute inset-0 cursor-default"
+      class="fixed inset-0 cursor-default"
       aria-label="Close modal"
+      tabindex="-1"
     ></button>
 
     <!-- Floating Modal Card -->

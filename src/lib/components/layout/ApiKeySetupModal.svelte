@@ -124,15 +124,16 @@
 </script>
 
 {#if appState.apiKeyModalOpen}
-	<div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+	<div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/80 backdrop-blur-sm animate-in fade-in">
 		<button
 			type="button"
 			onclick={() => (appState.apiKeyModalOpen = false)}
-			class="absolute inset-0 cursor-default"
+			class="fixed inset-0 cursor-default"
 			aria-label="Close modal"
+			tabindex="-1"
 		></button>
 
-		<div class="relative w-full max-w-lg bg-[#0e0717] border border-amber-400/40 shadow-2xl z-10 overflow-hidden">
+		<div class="relative w-full max-w-lg bg-[#0e0717] border border-amber-400/40 shadow-2xl z-10 overflow-hidden modal-spring">
 			<!-- Header -->
 			<div class="px-6 py-4 border-b border-purple-900/40 flex items-center justify-between bg-[#12091d]">
 				<div class="flex items-center gap-2.5">

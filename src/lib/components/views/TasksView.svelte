@@ -526,12 +526,13 @@
 
   <!-- Create / Edit Task Modal -->
   {#if showModal}
-    <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <button
         type="button"
         onclick={() => (showModal = false)}
-        class="absolute inset-0 cursor-default"
+        class="fixed inset-0 cursor-default"
         aria-label="Close modal"
+        tabindex="-1"
       ></button>
 
       <div

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { appState } from '../../stores/appState.svelte';
-  import { api } from '../../api/client';
-  import { portal } from '../../utils/portal';
-  import LoadError from '../layout/LoadError.svelte';
-  import type { Goal } from '../../types';
+  import { onMount } from "svelte";
+  import { appState } from "../../stores/appState.svelte";
+  import { api } from "../../api/client";
+  import { portal } from "../../utils/portal";
+  import LoadError from "../layout/LoadError.svelte";
+  import type { Goal } from "../../types";
   import {
     Target,
     Plus,
@@ -13,8 +13,8 @@
     Calendar,
     Award,
     Edit3,
-    X
-  } from 'lucide-svelte';
+    X,
+  } from "lucide-svelte";
 
   let goals = $state<Goal[]>([]);
   let isLoading = $state(false);
@@ -23,14 +23,14 @@
   // Modal state (Create & Edit)
   let showModal = $state(false);
   let editingGoalId = $state<number | null>(null);
-  let formTitle = $state('');
-  let formType = $state('Weekly Posts');
+  let formTitle = $state("");
+  let formType = $state("Weekly Posts");
   let formTarget = $state(4);
   let formCurrent = $state(0);
-  let formUnit = $state('videos');
-  let formDeadline = $state('');
+  let formUnit = $state("videos");
+  let formDeadline = $state("");
 
-  let achievedCount = $derived(goals.filter(g => g.is_achieved).length);
+  let achievedCount = $derived(goals.filter((g) => g.is_achieved).length);
 
   onMount(loadData);
 
@@ -48,23 +48,23 @@
 
   function openCreateModal() {
     editingGoalId = null;
-    formTitle = '';
-    formType = 'Weekly Posts';
+    formTitle = "";
+    formType = "Weekly Posts";
     formTarget = 4;
     formCurrent = 0;
-    formUnit = 'videos';
-    formDeadline = '';
+    formUnit = "videos";
+    formDeadline = "";
     showModal = true;
   }
 
   function openEditModal(goal: Goal) {
     editingGoalId = goal.id;
     formTitle = goal.title;
-    formType = goal.goal_type || 'Weekly Posts';
+    formType = goal.goal_type || "Weekly Posts";
     formTarget = goal.target_value;
     formCurrent = goal.current_value;
-    formUnit = goal.unit || 'videos';
-    formDeadline = goal.deadline ? goal.deadline.slice(0, 10) : '';
+    formUnit = goal.unit || "videos";
+    formDeadline = goal.deadline ? goal.deadline.slice(0, 10) : "";
     showModal = true;
   }
 
@@ -78,55 +78,64 @@
         goal_type: formType,
         target_value: Number(formTarget) || 1,
         current_value: Number(formCurrent) || 0,
-        unit: formUnit.trim() || 'items',
-        deadline: formDeadline ? new Date(formDeadline).toISOString() : undefined
+        unit: formUnit.trim() || "items",
+        deadline: formDeadline
+          ? new Date(formDeadline).toISOString()
+          : undefined,
       };
 
       if (editingGoalId) {
         const updated = await api.updateGoal(editingGoalId, payload);
-        goals = goals.map(g => (g.id === editingGoalId ? updated : g));
-        appState.showToast('Goal updated', 'success');
+        goals = goals.map((g) => (g.id === editingGoalId ? updated : g));
+        appState.showToast("Goal updated", "success");
       } else {
         const created = await api.createGoal(payload);
         goals = [...goals, created];
-        appState.showToast(`Goal created: "${created.title}"`, 'success');
+        appState.showToast(`Goal created: "${created.title}"`, "success");
       }
       showModal = false;
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not save goal', 'error');
+      appState.showToast(e.message || "Could not save goal", "error");
     }
   }
 
   async function handleAdjustProgress(goal: Goal, delta: number) {
-    const nextVal = Math.max(0, Number((goal.current_value + delta).toFixed(2)));
+    const nextVal = Math.max(
+      0,
+      Number((goal.current_value + delta).toFixed(2)),
+    );
     try {
       const updated = await api.updateGoal(goal.id, {
-        current_value: nextVal
+        current_value: nextVal,
       });
-      goals = goals.map(g => (g.id === goal.id ? updated : g));
+      goals = goals.map((g) => (g.id === goal.id ? updated : g));
       if (!goal.is_achieved && updated.is_achieved) {
-        appState.showToast(`Goal achieved: "${updated.title}"!`, 'success');
+        appState.showToast(`Goal achieved: "${updated.title}"!`, "success");
       }
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not update progress', 'error');
+      appState.showToast(e.message || "Could not update progress", "error");
     }
   }
 
   async function handleDeleteGoal(id: number) {
     try {
       await api.deleteGoal(id);
-      goals = goals.filter(g => g.id !== id);
-      appState.showToast('Goal removed', 'info');
+      goals = goals.filter((g) => g.id !== id);
+      appState.showToast("Goal removed", "info");
     } catch (e: any) {
-      appState.showToast(e.message || 'Delete failed', 'error');
+      appState.showToast(e.message || "Delete failed", "error");
     }
   }
 
   function formatDateShort(iso?: string) {
-    if (!iso) return '';
+    if (!iso) return "";
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 </script>
 
@@ -137,20 +146,29 @@
 
   <!-- Header -->
   <div class="swiss-card p-6 border border-purple-900/40 bg-[#10071c]">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+    >
       <div>
         <div class="flex items-center gap-2 mb-1">
-          <span class="text-xs font-medium text-amber-400">Goals & Milestones</span>
+          <span class="text-xs font-medium text-amber-400"
+            >Goals & Milestones</span
+          >
           {#if goals.length > 0}
-            <span class="text-xs text-slate-400">• {achievedCount} of {goals.length} completed</span>
+            <span class="text-xs text-slate-400"
+              >• {achievedCount} of {goals.length} completed</span
+            >
           {/if}
         </div>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+        <h1
+          class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5"
+        >
           <Target class="w-6 h-6 text-amber-400" />
           <span>Creator Goals</span>
         </h1>
         <p class="text-xs text-slate-400 mt-1 max-w-xl">
-          Set clear targets for videos published, scripts written, and channel milestones.
+          Set clear targets for videos published, scripts written, and channel
+          milestones.
         </p>
       </div>
 
@@ -167,9 +185,13 @@
 
   <!-- Goals Grid -->
   {#if goals.length === 0}
-    <div class="swiss-card text-center py-16 bg-[#10071c] border border-purple-900/30 space-y-3">
+    <div
+      class="swiss-card text-center py-16 bg-[#10071c] border border-purple-900/30 space-y-3"
+    >
       <Target class="w-8 h-8 text-purple-400/50 mx-auto" />
-      <p class="text-slate-400 text-xs">No goals set yet. Create your first goal to track your progress.</p>
+      <p class="text-slate-400 text-xs">
+        No goals set yet. Create your first goal to track your progress.
+      </p>
       <button
         type="button"
         onclick={openCreateModal}
@@ -182,12 +204,21 @@
   {:else}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
       {#each goals as goal}
-        {@const percent = Math.min(100, Math.round((goal.current_value / Math.max(1, goal.target_value)) * 100))}
-        <div class="swiss-card p-6 space-y-4 hover:border-amber-400/40 transition-all flex flex-col justify-between">
+        {@const percent = Math.min(
+          100,
+          Math.round(
+            (goal.current_value / Math.max(1, goal.target_value)) * 100,
+          ),
+        )}
+        <div
+          class="swiss-card p-6 space-y-4 hover:border-amber-400/40 transition-all flex flex-col justify-between"
+        >
           <div class="space-y-3">
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-950/60 text-purple-200 border border-purple-800/40">
+                <span
+                  class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-purple-950/60 text-purple-200 border border-purple-800/40"
+                >
                   {goal.goal_type}
                 </span>
                 {#if goal.deadline}
@@ -200,7 +231,9 @@
 
               <div class="flex items-center gap-1">
                 {#if goal.is_achieved}
-                  <span class="text-xs text-amber-300 flex items-center gap-1 border border-amber-400/30 px-2 py-0.5 rounded-full bg-amber-400/10 font-medium">
+                  <span
+                    class="text-xs text-amber-300 flex items-center gap-1 border border-amber-400/30 px-2 py-0.5 rounded-full bg-amber-400/10 font-medium"
+                  >
                     <Award class="w-3 h-3 text-amber-400" /> Completed
                   </span>
                 {/if}
@@ -226,14 +259,23 @@
             <div>
               <h3 class="font-semibold text-white text-base">{goal.title}</h3>
               <div class="flex items-baseline gap-2 mt-1.5">
-                <span class="text-2xl font-bold text-white tabular-nums">{goal.current_value}</span>
-                <span class="text-xs text-slate-400">/ {goal.target_value} {goal.unit}</span>
-                <span class="text-xs font-semibold text-amber-400 ml-auto tabular-nums">{percent}%</span>
+                <span class="text-2xl font-bold text-white tabular-nums"
+                  >{goal.current_value}</span
+                >
+                <span class="text-xs text-slate-400"
+                  >/ {goal.target_value} {goal.unit}</span
+                >
+                <span
+                  class="text-xs font-semibold text-amber-400 ml-auto tabular-nums"
+                  >{percent}%</span
+                >
               </div>
             </div>
 
             <!-- Progress bar -->
-            <div class="w-full h-2 rounded-full bg-[#08040d] border border-purple-900/40 overflow-hidden">
+            <div
+              class="w-full h-2 rounded-full bg-[#08040d] border border-purple-900/40 overflow-hidden"
+            >
               <div
                 class="h-full rounded-full transition-all duration-500 {goal.is_achieved
                   ? 'bg-gradient-to-r from-emerald-400 to-amber-300'
@@ -243,7 +285,9 @@
             </div>
           </div>
 
-          <div class="pt-3 border-t border-purple-900/30 flex items-center justify-between">
+          <div
+            class="pt-3 border-t border-purple-900/30 flex items-center justify-between"
+          >
             <span class="text-xs text-slate-400">Update progress</span>
             <div class="flex items-center gap-1.5">
               <button
@@ -272,19 +316,28 @@
 
   <!-- Create / Edit Goal Modal -->
   {#if showModal}
-    <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div use:portal class="fixed inset-0 z-50 overflow-y-auto flex items-start justify-center p-4 pt-6 sm:pt-10 pb-16 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <button
         type="button"
         onclick={() => (showModal = false)}
-        class="absolute inset-0 cursor-default"
+        class="fixed inset-0 cursor-default"
         aria-label="Close modal"
+        tabindex="-1"
       ></button>
 
-      <div class="relative w-full max-w-md bg-[#11081d] border border-purple-800/40 rounded-2xl p-6 space-y-4 shadow-2xl z-10 modal-spring">
-        <div class="flex items-center justify-between border-b border-purple-900/30 pb-3">
+      <div
+        class="relative w-full max-w-md bg-[#11081d] border border-purple-800/40 rounded-2xl p-6 space-y-4 shadow-2xl z-10 modal-spring"
+      >
+        <div
+          class="flex items-center justify-between border-b border-purple-900/30 pb-3"
+        >
           <div>
-            <span class="text-xs font-medium text-amber-400">{editingGoalId ? 'Edit Goal' : 'New Goal'}</span>
-            <h3 class="text-base font-bold text-white">{editingGoalId ? 'Update Goal Details' : 'Set a New Goal'}</h3>
+            <span class="text-xs font-medium text-amber-400"
+              >{editingGoalId ? "Edit Goal" : "New Goal"}</span
+            >
+            <h3 class="text-base font-bold text-white">
+              {editingGoalId ? "Update Goal Details" : "Set a New Goal"}
+            </h3>
           </div>
           <button
             type="button"
@@ -297,7 +350,11 @@
 
         <form onsubmit={handleSaveGoal} class="space-y-4">
           <div>
-            <label for="goal-title-input" class="block text-xs font-medium text-slate-300 mb-1">Goal Title</label>
+            <label
+              for="goal-title-input"
+              class="block text-xs font-medium text-slate-300 mb-1"
+              >Goal Title</label
+            >
             <input
               id="goal-title-input"
               type="text"
@@ -310,7 +367,11 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label for="goal-type-select" class="block text-xs font-medium text-slate-300 mb-1">Category</label>
+              <label
+                for="goal-type-select"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Category</label
+              >
               <select
                 id="goal-type-select"
                 bind:value={formType}
@@ -320,12 +381,18 @@
                 <option value="Monthly Output">Monthly Output</option>
                 <option value="Scripts Written">Scripts Written</option>
                 <option value="Audience Milestone">Audience Milestone</option>
-                <option value="Sponsorships & Revenue">Sponsorships & Revenue</option>
+                <option value="Sponsorships & Revenue"
+                  >Sponsorships & Revenue</option
+                >
               </select>
             </div>
 
             <div>
-              <label for="goal-unit-input" class="block text-xs font-medium text-slate-300 mb-1">Unit</label>
+              <label
+                for="goal-unit-input"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Unit</label
+              >
               <input
                 id="goal-unit-input"
                 type="text"
@@ -338,7 +405,11 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label for="goal-target-input" class="block text-xs font-medium text-slate-300 mb-1">Target Number</label>
+              <label
+                for="goal-target-input"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Target Number</label
+              >
               <input
                 id="goal-target-input"
                 type="number"
@@ -350,7 +421,11 @@
             </div>
 
             <div>
-              <label for="goal-current-input" class="block text-xs font-medium text-slate-300 mb-1">Current Progress</label>
+              <label
+                for="goal-current-input"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Current Progress</label
+              >
               <input
                 id="goal-current-input"
                 type="number"
@@ -363,7 +438,11 @@
           </div>
 
           <div>
-            <label for="goal-deadline-input" class="block text-xs font-medium text-slate-300 mb-1">Target Date (optional)</label>
+            <label
+              for="goal-deadline-input"
+              class="block text-xs font-medium text-slate-300 mb-1"
+              >Target Date (optional)</label
+            >
             <input
               id="goal-deadline-input"
               type="date"
@@ -372,7 +451,9 @@
             />
           </div>
 
-          <div class="flex justify-end gap-2 pt-3 border-t border-purple-900/30">
+          <div
+            class="flex justify-end gap-2 pt-3 border-t border-purple-900/30"
+          >
             <button
               type="button"
               onclick={() => (showModal = false)}
@@ -384,7 +465,7 @@
               type="submit"
               class="px-5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-semibold text-xs transition-all"
             >
-              {editingGoalId ? 'Save Changes' : 'Save Goal'}
+              {editingGoalId ? "Save Changes" : "Save Goal"}
             </button>
           </div>
         </form>
