@@ -80,6 +80,7 @@ export interface UserPreferences {
   openrouter_api_key?: string;
   deepseek_api_key?: string;
   news_api_key?: string;
+  news_region?: string;
   youtube_client_id?: string;
   linkedin_client_id?: string;
   tiktok_client_key?: string;
@@ -96,10 +97,19 @@ export interface NewsAIIdea {
   is_saved_to_ideas: boolean;
 }
 
+export interface NewsRegion {
+  code: string;
+  label: string;
+  flag: string;
+  description?: string;
+}
+
 export interface NewsArticle {
   id: number;
   niche: string;
   sub_niche: string;
+  region?: string;
+  category?: string;
   headline: string;
   summary?: string;
   source_name?: string;

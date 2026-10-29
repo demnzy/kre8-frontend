@@ -60,7 +60,8 @@ export class AppState {
     target_audience: 'Developers, tech enthusiasts, and digital creators',
     preferred_tone: 'Informative & Engaging',
     preferred_platforms: ['YouTube', 'LinkedIn', 'TikTok', 'X'],
-    weekly_post_goal: 3
+    weekly_post_goal: 3,
+    news_region: 'GLOBAL'
   });
 
   // Global counts for badges

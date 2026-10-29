@@ -4,7 +4,7 @@
   import { api } from '../../api/client';
   import { resolveAvatarUrl, resolveMediaUrl, handleAvatarError, handleThumbnailError } from '../../utils/avatar';
   import LoadError from '../layout/LoadError.svelte';
-  import type { NewsArticle, NewsAIIdea, CreatorWatchlist } from '../../types';
+  import type { NewsArticle, NewsAIIdea, CreatorWatchlist, NewsRegion } from '../../types';
   import {
     Compass,
     Radio,
@@ -22,7 +22,9 @@
     Copy,
     Check,
     Zap,
-    UserCheck
+    UserCheck,
+    Globe,
+    SlidersHorizontal
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import { getProviderInfo } from '../../utils/aiProviders';
@@ -34,6 +36,8 @@
   let newsArticles = $state<NewsArticle[]>([]);
   let newsSearch = $state('');
   let selectedSource = $state('All');
+  let selectedRegion = $state<string>(appState.preferences.news_region || 'GLOBAL');
+  let selectedCategory = $state<string>('all');
   let aiIdeas = $state<NewsAIIdea[]>([]);
   let watchlist = $state<CreatorWatchlist[]>([]);
   let isLoadingNews = $state(false);
@@ -41,9 +45,35 @@
   let synthesizingArticleId = $state<number | null>(null);
   let selectedSynthesisCreatorId = $state<number | null>(null);
 
+  let availableRegions = $state<NewsRegion[]>([
+    { code: 'GLOBAL', label: 'Global', flag: '🌐', description: 'Worldwide headlines & trends' },
+    { code: 'NG', label: 'Nigeria', flag: '🇳🇬', description: 'Nigerian tech & creator economy' },
+    { code: 'US', label: 'United States', flag: '🇺🇸', description: 'US media & Silicon Valley' },
+    { code: 'UK', label: 'United Kingdom', flag: '🇬🇧', description: 'UK media, tech & Europe' },
+    { code: 'CA', label: 'Canada', flag: '🇨🇦', description: 'Canadian innovation & startups' },
+    { code: 'IN', label: 'India', flag: '🇮🇳', description: 'Indian creator & startup ecosystem' },
+    { code: 'ZA', label: 'South Africa', flag: '🇿🇦', description: 'Southern African business & media' },
+    { code: 'KE', label: 'Kenya', flag: '🇰🇪', description: 'East African Silicon Savannah' },
+    { code: 'EU', label: 'Europe', flag: '🇪🇺', description: 'European tech & AI innovation' }
+  ]);
+
+  const categories = [
+    { id: 'all', label: 'All Topics' },
+    { id: 'creator', label: 'Creator Economy' },
+    { id: 'technology', label: 'Tech & AI' },
+    { id: 'business', label: 'Business & Startups' },
+    { id: 'gaming', label: 'Gaming' },
+    { id: 'science', label: 'Science & Health' },
+    { id: 'design', label: 'Design' }
+  ];
+
   let activeProvider = $derived(getProviderInfo(appState.preferences.ai_provider));
   let selectedSynthesisCreator = $derived(
     selectedSynthesisCreatorId ? (watchlist.find(w => w.id === selectedSynthesisCreatorId) || null) : null
+  );
+
+  let currentRegionInfo = $derived(
+    availableRegions.find(r => r.code.toUpperCase() === selectedRegion.toUpperCase()) || availableRegions[0]
   );
 
   let availableSources = $derived.by(() => {
@@ -57,11 +87,12 @@
   let filteredNewsArticles = $derived(
     newsArticles.filter(art => {
       const matchSource = selectedSource === 'All' || (art.source_name && art.source_name.trim() === selectedSource);
+      const matchCategory = selectedCategory === 'all' || (art.category && art.category.toLowerCase() === selectedCategory.toLowerCase());
       const matchQuery =
         !newsSearch.trim() ||
         art.headline.toLowerCase().includes(newsSearch.toLowerCase()) ||
         (art.summary && art.summary.toLowerCase().includes(newsSearch.toLowerCase()));
-      return matchSource && matchQuery;
+      return matchSource && matchCategory && matchQuery;
     })
   );
 
@@ -88,7 +119,13 @@
   let copiedHookId = $state<string | null>(null);
   let newsError = $state<string | null>(null);
 
-  onMount(() => {
+  onMount(async () => {
+    try {
+      const regList = await api.getNewsRegions();
+      if (regList && regList.length > 0) {
+        availableRegions = regList;
+      }
+    } catch {}
     loadDailyNews();
     loadWatchlist();
   });
@@ -97,7 +134,7 @@
     isLoadingNews = true;
     newsError = null;
     try {
-      newsArticles = await api.getDailyNews(forceRefresh);
+      newsArticles = await api.getDailyNews(forceRefresh, selectedRegion, selectedCategory);
     } catch (e: any) {
       newsError = e?.message || "Couldn't fetch today's news.";
       if (forceRefresh) appState.showToast(newsError, 'error');
@@ -106,15 +143,35 @@
     }
   }
 
+  function handleSelectRegion(code: string) {
+    if (selectedRegion === code) return;
+    selectedRegion = code;
+    selectedSource = 'All';
+    loadDailyNews(false);
+  }
+
+  function handleSelectCategory(catId: string) {
+    if (selectedCategory === catId) return;
+    selectedCategory = catId;
+    loadDailyNews(false);
+  }
+
+  function formatRegionBadge(code?: string): string {
+    if (!code) return '🌐 Global';
+    const reg = availableRegions.find(r => r.code.toUpperCase() === code.toUpperCase());
+    return reg ? `${reg.flag} ${reg.label}` : code;
+  }
+
   async function handleSynthesizeAI(articleId?: number) {
     if (!appState.requireApiKey()) return;
     try {
       isSynthesizing = true;
       if (articleId) synthesizingArticleId = articleId;
       const voiceLabel = selectedSynthesisCreator ? ` in ${selectedSynthesisCreator.creator_name}'s voice` : '';
-      appState.showToast(`Synthesizing angles${voiceLabel} with ${activeProvider.name}...`, 'info');
-      aiIdeas = await api.synthesizeNewsToIdeas(articleId, selectedSynthesisCreatorId || undefined);
-      newsArticles = await api.getDailyNews();
+      const regLabel = selectedRegion !== 'GLOBAL' ? ` (${currentRegionInfo.label})` : '';
+      appState.showToast(`Synthesizing angles${voiceLabel}${regLabel} with ${activeProvider.name}...`, 'info');
+      aiIdeas = await api.synthesizeNewsToIdeas(articleId, selectedSynthesisCreatorId || undefined, selectedRegion);
+      newsArticles = await api.getDailyNews(false, selectedRegion, selectedCategory);
       appState.showToast(`Synthesized content angles & hooks${voiceLabel}!`, 'success');
     } catch (e: any) {
       appState.showToast(e.message || 'AI generation failed', 'error');
@@ -357,7 +414,7 @@
         </span>
       </div>
       <span class="swiss-tag text-purple-400 font-mono">
-        NICHE: {appState.preferences.primary_niche} • {appState.preferences.sub_niche}
+        NICHE: {appState.preferences.primary_niche} • {appState.preferences.sub_niche} • {currentRegionInfo.flag} {currentRegionInfo.code}
       </span>
     </div>
 
@@ -449,7 +506,50 @@
 
   <!-- TAB 1: DAILY NEWS & AI ANGLES -->
   {#if activeTab === 'news'}
-    <div class="space-y-6">
+    <div class="space-y-4">
+      <!-- Geographic Region & Localization Selector -->
+      <div class="bg-[#0b0513] p-3.5 border border-purple-900/60 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <Globe class="w-4 h-4 text-amber-400 shrink-0" />
+            <span class="text-xs font-mono font-bold text-white uppercase tracking-wider">Region Focus</span>
+            <span class="text-[11px] font-mono text-amber-300/90 hidden sm:inline">({currentRegionInfo.label} — {currentRegionInfo.description})</span>
+          </div>
+          <span class="text-[10px] font-mono text-purple-400">Localized RSS & Regional Wire</span>
+        </div>
+
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          {#each availableRegions as reg}
+            <button
+              type="button"
+              onclick={() => handleSelectRegion(reg.code)}
+              class="px-2.5 py-1 text-xs font-mono transition-all flex items-center gap-1.5 shrink-0 rounded {selectedRegion.toUpperCase() === reg.code.toUpperCase()
+                ? 'bg-amber-400 text-black font-bold shadow-sm'
+                : 'bg-purple-950/40 text-slate-300 border border-purple-900/50 hover:text-white hover:border-purple-700'}"
+              title={reg.description}
+            >
+              <span>{reg.flag}</span>
+              <span>{reg.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Category Filter Pills Bar -->
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        {#each categories as cat}
+          <button
+            type="button"
+            onclick={() => handleSelectCategory(cat.id)}
+            class="px-3 py-1 text-xs font-mono transition-all shrink-0 rounded {selectedCategory === cat.id
+              ? 'bg-purple-600 text-white font-bold'
+              : 'bg-[#10071c] text-slate-400 border border-purple-900/40 hover:text-slate-200'}"
+          >
+            {cat.label}
+          </button>
+        {/each}
+      </div>
+
       {#if newsArticles.length > 0}
         <!-- Filter & Search Bar for Expanded News Pool -->
         <div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#0d0617] p-3 border border-purple-900/40">
@@ -480,12 +580,12 @@
 
       {#if isLoadingNews}
         <div class="text-center py-16 text-slate-500 text-xs font-mono animate-pulse">
-          Ingesting latest daily news and headlines for {appState.preferences.sub_niche}...
+          Ingesting latest daily news and headlines for {currentRegionInfo.label} • {appState.preferences.sub_niche}...
         </div>
       {:else if filteredNewsArticles.length === 0}
         <div class="text-center py-16 text-slate-500 text-xs font-mono">
           {newsArticles.length === 0
-            ? 'No news articles cached yet. Click Refresh News above to fetch the latest stories.'
+            ? `No news cached for ${currentRegionInfo.label} yet. Click Refresh to ingest breaking stories.`
             : 'No articles match your active filter.'}
         </div>
       {:else}
@@ -503,11 +603,21 @@
                     loading="lazy"
                   />
                 {/if}
-                <div class="space-y-1 flex-1">
-                  <div class="flex items-center gap-2 text-xs font-mono">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
                     <span class="px-2 py-0.5 bg-purple-950 text-amber-400 border border-purple-800 font-bold text-[10px]">
                       {article.source_name || 'News Wire'}
                     </span>
+                    {#if article.region}
+                      <span class="px-2 py-0.5 bg-black text-amber-300 border border-purple-900/60 font-mono text-[10px]">
+                        {formatRegionBadge(article.region)}
+                      </span>
+                    {/if}
+                    {#if article.category && article.category !== 'general'}
+                      <span class="px-2 py-0.5 bg-purple-900/30 text-purple-300 border border-purple-800/40 font-mono text-[10px] capitalize">
+                        {article.category}
+                      </span>
+                    {/if}
                     <span class="text-slate-500">•</span>
                     <span class="text-slate-300 font-bold text-[11px]">{formatNewsDate(article.published_date)}</span>
                   </div>

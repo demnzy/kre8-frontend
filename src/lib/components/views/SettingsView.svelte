@@ -56,7 +56,8 @@
     preferred_platforms: ['YouTube', 'LinkedIn', 'TikTok', 'X'],
     weekly_post_goal: 3,
     ai_provider: 'gemini',
-    ai_model: 'gemini-2.5-flash'
+    ai_model: 'gemini-2.5-flash',
+    news_region: 'GLOBAL'
   });
 
   let showKeyPassword = $state(false);
@@ -408,13 +409,38 @@
         </a>
       </div>
 
-      <div class="space-y-3">
+      <div class="space-y-4">
+        <!-- Default Geographic News Region -->
+        <div>
+          <label for="swiss-news-region" class="block swiss-tag text-slate-400 mb-1">
+            Default Geographic News Region
+          </label>
+          <select
+            id="swiss-news-region"
+            bind:value={prefs.news_region}
+            class="w-full px-3.5 py-2 bg-black border border-purple-900 text-white text-xs font-mono focus:border-amber-400 cursor-pointer"
+          >
+            <option value="GLOBAL">🌐 Global (Worldwide Headlines & Trends)</option>
+            <option value="NG">🇳🇬 Nigeria (West Africa, Startups, Creators & Tech)</option>
+            <option value="US">🇺🇸 United States (Silicon Valley, Media & Culture)</option>
+            <option value="UK">🇬🇧 United Kingdom (UK Media, Tech & Europe)</option>
+            <option value="CA">🇨🇦 Canada (Canadian Innovation & Startups)</option>
+            <option value="IN">🇮🇳 India (Creator Economy, AI & Venture)</option>
+            <option value="ZA">🇿🇦 South Africa (Southern African Media & Business)</option>
+            <option value="KE">🇰🇪 Kenya (East African Silicon Savannah)</option>
+            <option value="EU">🇪🇺 Europe (European Tech & AI Policy)</option>
+          </select>
+          <span class="text-[10px] font-mono text-slate-500 mt-1 block">
+            Sets the default regional feed in the Discover tab. You can also switch regions instantly on the fly.
+          </span>
+        </div>
+
         <div>
           <div class="flex items-center justify-between mb-1">
             <label for="swiss-news-api-key" class="swiss-tag text-slate-400">
-              NewsAPI.org API Key
+              News API Key (NewsAPI.org, GNews.io, or NewsData.io)
             </label>
-            <span class="text-[10px] font-mono text-slate-500">Optional (32-character key)</span>
+            <span class="text-[10px] font-mono text-slate-500">Optional key</span>
           </div>
 
           <div class="flex items-center gap-2">
@@ -423,7 +449,7 @@
                 id="swiss-news-api-key"
                 type={showNewsKeyPassword ? 'text' : 'password'}
                 bind:value={prefs.news_api_key}
-                placeholder="Paste your 32-character NewsAPI.org key here..."
+                placeholder="Paste your NewsAPI.org, GNews.io, or NewsData.io key..."
                 class="w-full pl-3.5 pr-10 py-2 bg-black border border-purple-900 text-amber-300 text-xs font-mono focus:border-amber-400"
               />
               <button
@@ -455,7 +481,7 @@
         {#if savedNewsKeyInStore && savedNewsKeyInStore === currentNewsKeyInput}
           <div class="p-3 bg-emerald-950/30 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
             <CheckCircle2 class="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>NewsAPI key saved to your account. Ingesting from NewsAPI.org (80,000+ sources) blended with live niche feeds.</span>
+            <span>Commercial News API key active. Blending live API wire feeds with localized Google News and curated regional publications.</span>
           </div>
         {:else if currentNewsKeyInput}
           <div class="p-3 bg-amber-950/30 border border-amber-500/40 text-[11px] font-mono text-amber-300 flex items-center gap-2">
@@ -464,9 +490,9 @@
           </div>
         {:else}
           <div class="p-3 bg-black/60 border border-purple-900/60 text-[11px] font-mono text-slate-300 space-y-1">
-            <div class="text-amber-400 font-bold">Standard Feeds Active (No key required)</div>
+            <div class="text-amber-400 font-bold">Standard Diverse & Localized Feeds Active (No key required)</div>
             <p class="text-slate-400 leading-relaxed">
-              Kre8 automatically pulls real-time verified stories via Google News RSS and authoritative direct feeds (TechCrunch, Ars Technica, The Verge, Hacker News, MarketWatch, CNBC, ScienceDaily) based on your niche and search keywords above. Adding a personal NewsAPI key is completely optional if you want direct access to the commercial NewsAPI.org feed.
+              Kre8 automatically pulls real-time verified stories via localized Google News RSS and authoritative direct feeds (TechCabal, Techpoint, Rest of World, Tubefilter, Digiday, Sifted, YourStory, TechCrunch, The Verge, CNBC, ScienceDaily) based on your chosen region and niche. Adding a third-party key is completely optional.
             </p>
           </div>
         {/if}

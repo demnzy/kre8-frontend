@@ -7,6 +7,7 @@ import type {
   UserPreferences,
   NewsArticle,
   NewsAIIdea,
+  NewsRegion,
   ContentItem,
   ContentIdea,
   Script,
@@ -249,12 +250,21 @@ export const api = {
     }),
 
   // Daily News & AI Idea Pipeline
-  getDailyNews: (forceRefresh = false) =>
-    request<NewsArticle[]>(`/news/daily?force_refresh=${forceRefresh}`, { timeoutMs: 45_000, retries: 0 }),
-  synthesizeNewsToIdeas: (articleId?: number, creatorId?: number) => {
+  getDailyNews: (forceRefresh = false, region?: string, category?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (forceRefresh) params.append('force_refresh', 'true');
+    if (region) params.append('region', region);
+    if (category && category !== 'all') params.append('category', category);
+    if (search && search.trim()) params.append('search', search.trim());
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<NewsArticle[]>(`/news/daily${qs}`, { timeoutMs: 45_000, retries: 0 });
+  },
+  getNewsRegions: () => request<NewsRegion[]>('/news/regions'),
+  synthesizeNewsToIdeas: (articleId?: number, creatorId?: number, region?: string) => {
     const params = new URLSearchParams();
     if (articleId) params.append('article_id', String(articleId));
     if (creatorId) params.append('creator_id', String(creatorId));
+    if (region) params.append('region', region);
     const qs = params.toString() ? `?${params.toString()}` : '';
     return request<NewsAIIdea[]>(`/news/synthesize${qs}`, {
       method: 'POST',
