@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import { portal } from '../../utils/portal';
   import LoadError from '../layout/LoadError.svelte';
   import type { Task, ContentItem } from '../../types';
   import {
@@ -13,12 +14,12 @@
     Edit3,
     Video,
     Search,
-    X
-  } from 'lucide-svelte';
+    X,
+  } from "lucide-svelte";
 
-  type TaskFilter = 'all' | 'pending' | 'urgent' | 'completed';
-  let activeFilter = $state<TaskFilter>('all');
-  let searchQuery = $state('');
+  type TaskFilter = "all" | "pending" | "urgent" | "completed";
+  let activeFilter = $state<TaskFilter>("all");
+  let searchQuery = $state("");
   let tasks = $state<Task[]>([]);
   let contentItems = $state<ContentItem[]>([]);
   let isLoading = $state(false);
@@ -30,12 +31,12 @@
   // Create / Edit Task modal state
   let showModal = $state(false);
   let editingTaskId = $state<number | null>(null);
-  let formTitle = $state('');
-  let formDescription = $state('');
-  let formPriority = $state<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
-  let formDueDate = $state('');
-  let formContentItemId = $state<string>('');
-  let formChecklistRaw = $state('');
+  let formTitle = $state("");
+  let formDescription = $state("");
+  let formPriority = $state<"Low" | "Medium" | "High" | "Urgent">("Medium");
+  let formDueDate = $state("");
+  let formContentItemId = $state<string>("");
+  let formChecklistRaw = $state("");
 
   function defaultTomorrowDate(): string {
     const d = new Date(Date.now() + 86400000);
@@ -49,52 +50,57 @@
     loadError = null;
     const [tasksRes, contentRes] = await Promise.allSettled([
       api.getTasks(),
-      api.getContentItems()
+      api.getContentItems(),
     ]);
-    if (tasksRes.status === 'fulfilled') tasks = tasksRes.value;
-    if (contentRes.status === 'fulfilled') contentItems = contentRes.value;
-    if (tasksRes.status === 'rejected') {
+    if (tasksRes.status === "fulfilled") tasks = tasksRes.value;
+    if (contentRes.status === "fulfilled") contentItems = contentRes.value;
+    if (tasksRes.status === "rejected") {
       loadError = tasksRes.reason?.message || "Couldn't load your tasks.";
     }
     isLoading = false;
   }
 
   let filteredTasks = $derived(
-    tasks.filter(t => {
-      if (activeFilter === 'pending' && t.is_completed) return false;
-      if (activeFilter === 'completed' && !t.is_completed) return false;
-      if (activeFilter === 'urgent' && (t.is_completed || (t.priority !== 'Urgent' && t.priority !== 'High'))) {
+    tasks.filter((t) => {
+      if (activeFilter === "pending" && t.is_completed) return false;
+      if (activeFilter === "completed" && !t.is_completed) return false;
+      if (
+        activeFilter === "urgent" &&
+        (t.is_completed || (t.priority !== "Urgent" && t.priority !== "High"))
+      ) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const inTitle = t.title.toLowerCase().includes(q);
-        const inDesc = (t.description || '').toLowerCase().includes(q);
+        const inDesc = (t.description || "").toLowerCase().includes(q);
         return inTitle || inDesc;
       }
       return true;
-    })
+    }),
   );
 
   function openCreateModal() {
     editingTaskId = null;
-    formTitle = '';
-    formDescription = '';
-    formPriority = 'Medium';
+    formTitle = "";
+    formDescription = "";
+    formPriority = "Medium";
     formDueDate = defaultTomorrowDate();
-    formContentItemId = '';
-    formChecklistRaw = '';
+    formContentItemId = "";
+    formChecklistRaw = "";
     showModal = true;
   }
 
   function openEditModal(task: Task) {
     editingTaskId = task.id;
     formTitle = task.title;
-    formDescription = task.description || '';
-    formPriority = task.priority || 'Medium';
-    formDueDate = task.due_date ? task.due_date.slice(0, 10) : '';
-    formContentItemId = task.content_item_id ? String(task.content_item_id) : '';
-    formChecklistRaw = (task.checklist || []).map(c => c.text).join('\n');
+    formDescription = task.description || "";
+    formPriority = task.priority || "Medium";
+    formDueDate = task.due_date ? task.due_date.slice(0, 10) : "";
+    formContentItemId = task.content_item_id
+      ? String(task.content_item_id)
+      : "";
+    formChecklistRaw = (task.checklist || []).map((c) => c.text).join("\n");
     showModal = true;
   }
 
@@ -102,128 +108,154 @@
     e.preventDefault();
     if (!formTitle.trim()) return;
 
-    const existingTask = editingTaskId ? tasks.find(t => t.id === editingTaskId) : null;
+    const existingTask = editingTaskId
+      ? tasks.find((t) => t.id === editingTaskId)
+      : null;
     const existingDoneMap = new Map(
-      (existingTask?.checklist || []).map(c => [c.text.trim().toLowerCase(), c.done])
+      (existingTask?.checklist || []).map((c) => [
+        c.text.trim().toLowerCase(),
+        c.done,
+      ]),
     );
 
     const checklistItems = formChecklistRaw
-      .split('\n')
-      .map(line => line.trim())
+      .split("\n")
+      .map((line) => line.trim())
       .filter(Boolean)
-      .map(text => ({
+      .map((text) => ({
         text,
-        done: existingDoneMap.get(text.toLowerCase()) ?? false
+        done: existingDoneMap.get(text.toLowerCase()) ?? false,
       }));
 
     const payload: Partial<Task> = {
       title: formTitle.trim(),
       description: formDescription.trim() || undefined,
       priority: formPriority,
-      due_date: formDueDate ? new Date(`${formDueDate}T12:00:00`).toISOString() : undefined,
-      content_item_id: formContentItemId ? Number(formContentItemId) : undefined,
-      checklist: checklistItems
+      due_date: formDueDate
+        ? new Date(`${formDueDate}T12:00:00`).toISOString()
+        : undefined,
+      content_item_id: formContentItemId
+        ? Number(formContentItemId)
+        : undefined,
+      checklist: checklistItems,
     };
 
     try {
       if (editingTaskId) {
         const updated = await api.updateTask(editingTaskId, payload);
-        tasks = tasks.map(t => (t.id === editingTaskId ? updated : t));
-        appState.showToast('Task updated', 'success');
+        tasks = tasks.map((t) => (t.id === editingTaskId ? updated : t));
+        appState.showToast("Task updated", "success");
       } else {
         const created = await api.createTask({
           ...payload,
-          is_completed: false
+          is_completed: false,
         });
         tasks = [created, ...tasks];
-        appState.showToast(`Task created: "${created.title}"`, 'success');
+        appState.showToast(`Task created: "${created.title}"`, "success");
       }
       showModal = false;
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not save task', 'error');
+      appState.showToast(e.message || "Could not save task", "error");
     }
   }
 
   async function toggleTaskComplete(task: Task) {
     try {
-      const updated = await api.updateTask(task.id, { is_completed: !task.is_completed });
-      tasks = tasks.map(t => (t.id === task.id ? updated : t));
-      appState.showToast(updated.is_completed ? 'Task completed!' : 'Task reopened', 'info');
+      const updated = await api.updateTask(task.id, {
+        is_completed: !task.is_completed,
+      });
+      tasks = tasks.map((t) => (t.id === task.id ? updated : t));
+      appState.showToast(
+        updated.is_completed ? "Task completed!" : "Task reopened",
+        "info",
+      );
     } catch (e: any) {
-      appState.showToast(e.message || 'Failed to update task', 'error');
+      appState.showToast(e.message || "Failed to update task", "error");
     }
   }
 
   async function toggleChecklistItem(task: Task, itemIndex: number) {
     const updatedChecklist = (task.checklist || []).map((c, idx) =>
-      idx === itemIndex ? { ...c, done: !c.done } : c
+      idx === itemIndex ? { ...c, done: !c.done } : c,
     );
     try {
-      const updated = await api.updateTask(task.id, { checklist: updatedChecklist });
-      tasks = tasks.map(t => (t.id === task.id ? updated : t));
+      const updated = await api.updateTask(task.id, {
+        checklist: updatedChecklist,
+      });
+      tasks = tasks.map((t) => (t.id === task.id ? updated : t));
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not update checklist', 'error');
+      appState.showToast(e.message || "Could not update checklist", "error");
     }
   }
 
   async function addInlineChecklistItem(task: Task) {
-    const text = (inlineStepInputs[task.id] || '').trim();
+    const text = (inlineStepInputs[task.id] || "").trim();
     if (!text) return;
     const updatedChecklist = [...(task.checklist || []), { text, done: false }];
     try {
-      const updated = await api.updateTask(task.id, { checklist: updatedChecklist });
-      tasks = tasks.map(t => (t.id === task.id ? updated : t));
-      inlineStepInputs = { ...inlineStepInputs, [task.id]: '' };
+      const updated = await api.updateTask(task.id, {
+        checklist: updatedChecklist,
+      });
+      tasks = tasks.map((t) => (t.id === task.id ? updated : t));
+      inlineStepInputs = { ...inlineStepInputs, [task.id]: "" };
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not add step', 'error');
+      appState.showToast(e.message || "Could not add step", "error");
     }
   }
 
   async function removeChecklistItem(task: Task, itemIndex: number) {
-    const updatedChecklist = (task.checklist || []).filter((_, idx) => idx !== itemIndex);
+    const updatedChecklist = (task.checklist || []).filter(
+      (_, idx) => idx !== itemIndex,
+    );
     try {
-      const updated = await api.updateTask(task.id, { checklist: updatedChecklist });
-      tasks = tasks.map(t => (t.id === task.id ? updated : t));
+      const updated = await api.updateTask(task.id, {
+        checklist: updatedChecklist,
+      });
+      tasks = tasks.map((t) => (t.id === task.id ? updated : t));
     } catch (e: any) {
-      appState.showToast(e.message || 'Could not remove step', 'error');
+      appState.showToast(e.message || "Could not remove step", "error");
     }
   }
 
   async function handleDelete(id: number) {
     try {
       await api.deleteTask(id);
-      tasks = tasks.filter(t => t.id !== id);
-      appState.showToast('Task deleted', 'info');
+      tasks = tasks.filter((t) => t.id !== id);
+      appState.showToast("Task deleted", "info");
     } catch (e: any) {
-      appState.showToast(e.message || 'Delete failed', 'error');
+      appState.showToast(e.message || "Delete failed", "error");
     }
   }
 
-  function formatDueDate(iso?: string): { label: string; isOverdue: boolean } | null {
+  function formatDueDate(
+    iso?: string,
+  ): { label: string; isOverdue: boolean } | null {
     if (!iso) return null;
     const d = new Date(iso);
     if (isNaN(d.getTime())) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
-    if (diffDays === 0) return { label: 'Due today', isOverdue: false };
-    if (diffDays === 1) return { label: 'Due tomorrow', isOverdue: false };
+    const diffDays = Math.round(
+      (target.getTime() - today.getTime()) / 86400000,
+    );
+    if (diffDays === 0) return { label: "Due today", isOverdue: false };
+    if (diffDays === 1) return { label: "Due tomorrow", isOverdue: false };
     if (diffDays < 0) {
       return {
-        label: `Overdue (${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})`,
-        isOverdue: true
+        label: `Overdue (${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })})`,
+        isOverdue: true,
       };
     }
     return {
-      label: `Due ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
-      isOverdue: false
+      label: `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+      isOverdue: false,
     };
   }
 
   function getLinkedContentTitle(contentId?: number): string | null {
     if (!contentId) return null;
-    return contentItems.find(c => c.id === contentId)?.title || null;
+    return contentItems.find((c) => c.id === contentId)?.title || null;
   }
 </script>
 
@@ -234,12 +266,18 @@
 
   <!-- Header -->
   <div class="swiss-card p-6 border border-purple-900/40 bg-[#10071c]">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+    >
       <div>
         <div class="flex items-center gap-2 mb-1">
-          <span class="text-xs font-medium text-amber-400">Production Checklist</span>
+          <span class="text-xs font-medium text-amber-400"
+            >Production Checklist</span
+          >
         </div>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+        <h1
+          class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5"
+        >
           <CheckSquare class="w-6 h-6 text-amber-400" />
           <span>Tasks & Checklists</span>
         </h1>
@@ -260,18 +298,16 @@
   </div>
 
   <!-- Filter Tabs & Search -->
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/30 pb-3">
+  <div
+    class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/30 pb-3"
+  >
     <div class="flex items-center gap-2 overflow-x-auto">
-      {#each [
-        { id: 'all', label: `All (${tasks.length})` },
-        { id: 'pending', label: `To Do (${tasks.filter(t => !t.is_completed).length})` },
-        { id: 'urgent', label: `High Priority (${tasks.filter(t => !t.is_completed && (t.priority === 'Urgent' || t.priority === 'High')).length})` },
-        { id: 'completed', label: `Completed (${tasks.filter(t => t.is_completed).length})` }
-      ] as tab}
+      {#each [{ id: "all", label: `All (${tasks.length})` }, { id: "pending", label: `To Do (${tasks.filter((t) => !t.is_completed).length})` }, { id: "urgent", label: `High Priority (${tasks.filter((t) => !t.is_completed && (t.priority === "Urgent" || t.priority === "High")).length})` }, { id: "completed", label: `Completed (${tasks.filter((t) => t.is_completed).length})` }] as tab}
         <button
           type="button"
           onclick={() => (activeFilter = tab.id as TaskFilter)}
-          class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 {activeFilter === tab.id
+          class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 {activeFilter ===
+          tab.id
             ? 'bg-amber-400 text-black font-semibold'
             : 'bg-purple-950/30 text-slate-400 hover:text-white'}"
         >
@@ -281,7 +317,9 @@
     </div>
 
     <div class="relative w-full sm:w-64">
-      <Search class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <Search
+        class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+      />
       <input
         type="text"
         bind:value={searchQuery}
@@ -293,10 +331,14 @@
 
   <!-- Task List -->
   {#if filteredTasks.length === 0}
-    <div class="swiss-card text-center py-16 bg-[#10071c] border border-purple-900/30 space-y-3">
+    <div
+      class="swiss-card text-center py-16 bg-[#10071c] border border-purple-900/30 space-y-3"
+    >
       <CheckSquare class="w-8 h-8 text-purple-400/50 mx-auto" />
       <p class="text-slate-400 text-xs">
-        {tasks.length === 0 ? 'No tasks yet. Create your first task to get started.' : 'No tasks match your current filter.'}
+        {tasks.length === 0
+          ? "No tasks yet. Create your first task to get started."
+          : "No tasks match your current filter."}
       </p>
       {#if tasks.length === 0}
         <button
@@ -314,9 +356,13 @@
       {#each filteredTasks as task}
         {@const dueInfo = formatDueDate(task.due_date)}
         {@const linkedTitle = getLinkedContentTitle(task.content_item_id)}
-        {@const doneCount = (task.checklist || []).filter(c => c.done).length}
+        {@const doneCount = (task.checklist || []).filter((c) => c.done).length}
         {@const totalSteps = (task.checklist || []).length}
-        <div class="swiss-card p-5 border border-purple-900/40 hover:border-amber-400/40 transition-all space-y-3 {task.is_completed ? 'opacity-65 bg-[#0c0515]' : ''}">
+        <div
+          class="swiss-card p-5 border border-purple-900/40 hover:border-amber-400/40 transition-all space-y-3 {task.is_completed
+            ? 'opacity-65 bg-[#0c0515]'
+            : ''}"
+        >
           <div class="flex items-start justify-between gap-4">
             <div class="flex items-start gap-3 flex-1">
               <button
@@ -325,29 +371,39 @@
                 class="mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 {task.is_completed
                   ? 'bg-amber-400 border-amber-400 text-black'
                   : 'border-purple-500/60 hover:border-amber-400 text-transparent'}"
-                title={task.is_completed ? 'Mark incomplete' : 'Mark complete'}
+                title={task.is_completed ? "Mark incomplete" : "Mark complete"}
               >
                 <CheckCircle2 class="w-3.5 h-3.5" />
               </button>
 
               <div class="space-y-1.5 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-sm font-semibold text-white {task.is_completed ? 'line-through text-slate-400' : ''}">
+                  <span
+                    class="text-sm font-semibold text-white {task.is_completed
+                      ? 'line-through text-slate-400'
+                      : ''}"
+                  >
                     {task.title}
                   </span>
 
-                  <span class="px-2 py-0.5 rounded-full text-[11px] font-medium border {task.priority === 'Urgent'
-                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                    : task.priority === 'High'
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-                    : 'bg-purple-950/50 text-purple-200 border-purple-800/40'}">
+                  <span
+                    class="px-2 py-0.5 rounded-full text-[11px] font-medium border {task.priority ===
+                    'Urgent'
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                      : task.priority === 'High'
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                        : 'bg-purple-950/50 text-purple-200 border-purple-800/40'}"
+                  >
                     {task.priority}
                   </span>
 
                   {#if dueInfo}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border {dueInfo.isOverdue && !task.is_completed
-                      ? 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-medium'
-                      : 'bg-black/40 text-slate-300 border-purple-900/40'}">
+                    <span
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border {dueInfo.isOverdue &&
+                      !task.is_completed
+                        ? 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-medium'
+                        : 'bg-black/40 text-slate-300 border-purple-900/40'}"
+                    >
                       <Calendar class="w-3 h-3 text-amber-400" />
                       <span>{dueInfo.label}</span>
                     </span>
@@ -356,7 +412,7 @@
                   {#if linkedTitle}
                     <button
                       type="button"
-                      onclick={() => appState.setModule('content')}
+                      onclick={() => appState.setModule("content")}
                       class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-purple-950/60 text-purple-200 border border-purple-700/40 hover:border-amber-400/50 transition-colors"
                       title="Open in Content Board"
                     >
@@ -408,10 +464,16 @@
                   <button
                     type="button"
                     onclick={() => toggleChecklistItem(task, cIdx)}
-                    class="flex items-center gap-2.5 text-xs text-left flex-1 hover:text-slate-100 transition-colors {check.done ? 'line-through text-slate-500' : 'text-slate-300'}"
+                    class="flex items-center gap-2.5 text-xs text-left flex-1 hover:text-slate-100 transition-colors {check.done
+                      ? 'line-through text-slate-500'
+                      : 'text-slate-300'}"
                   >
-                    <span class="w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 {check.done ? 'bg-amber-400 border-amber-400 text-black font-bold' : 'border-purple-600/60'}">
-                      {check.done ? '✓' : ''}
+                    <span
+                      class="w-4 h-4 rounded border flex items-center justify-center text-[10px] shrink-0 {check.done
+                        ? 'bg-amber-400 border-amber-400 text-black font-bold'
+                        : 'border-purple-600/60'}"
+                    >
+                      {check.done ? "✓" : ""}
                     </span>
                     <span>{check.text}</span>
                   </button>
@@ -431,10 +493,14 @@
             <div class="flex items-center gap-2 pt-1">
               <input
                 type="text"
-                value={inlineStepInputs[task.id] || ''}
-                oninput={(e) => (inlineStepInputs = { ...inlineStepInputs, [task.id]: (e.currentTarget as HTMLInputElement).value })}
+                value={inlineStepInputs[task.id] || ""}
+                oninput={(e) =>
+                  (inlineStepInputs = {
+                    ...inlineStepInputs,
+                    [task.id]: (e.currentTarget as HTMLInputElement).value,
+                  })}
                 onkeydown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     e.preventDefault();
                     addInlineChecklistItem(task);
                   }
@@ -442,7 +508,7 @@
                 placeholder="+ Add a checklist step..."
                 class="flex-1 max-w-sm px-2.5 py-1 rounded-md bg-black/40 border border-purple-900/40 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400"
               />
-              {#if (inlineStepInputs[task.id] || '').trim()}
+              {#if (inlineStepInputs[task.id] || "").trim()}
                 <button
                   type="button"
                   onclick={() => addInlineChecklistItem(task)}
@@ -460,7 +526,7 @@
 
   <!-- Create / Edit Task Modal -->
   {#if showModal}
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <button
         type="button"
         onclick={() => (showModal = false)}
@@ -468,11 +534,19 @@
         aria-label="Close modal"
       ></button>
 
-      <div class="relative w-full max-w-md bg-[#11081d] border border-purple-800/40 rounded-2xl p-6 space-y-4 shadow-2xl z-10 modal-spring">
-        <div class="flex items-center justify-between border-b border-purple-900/30 pb-3">
+      <div
+        class="relative w-full max-w-md bg-[#11081d] border border-purple-800/40 rounded-2xl p-6 space-y-4 shadow-2xl z-10 modal-spring"
+      >
+        <div
+          class="flex items-center justify-between border-b border-purple-900/30 pb-3"
+        >
           <div>
-            <span class="text-xs font-medium text-amber-400">{editingTaskId ? 'Edit Task' : 'New Task'}</span>
-            <h3 class="text-base font-bold text-white">{editingTaskId ? 'Update Task' : 'Create Task'}</h3>
+            <span class="text-xs font-medium text-amber-400"
+              >{editingTaskId ? "Edit Task" : "New Task"}</span
+            >
+            <h3 class="text-base font-bold text-white">
+              {editingTaskId ? "Update Task" : "Create Task"}
+            </h3>
           </div>
           <button
             type="button"
@@ -485,7 +559,11 @@
 
         <form onsubmit={handleSaveTask} class="space-y-3.5">
           <div>
-            <label for="task-title-input" class="block text-xs font-medium text-slate-300 mb-1">Task Title</label>
+            <label
+              for="task-title-input"
+              class="block text-xs font-medium text-slate-300 mb-1"
+              >Task Title</label
+            >
             <input
               id="task-title-input"
               type="text"
@@ -497,7 +575,11 @@
           </div>
 
           <div>
-            <label for="task-desc-input" class="block text-xs font-medium text-slate-300 mb-1">Notes & Details</label>
+            <label
+              for="task-desc-input"
+              class="block text-xs font-medium text-slate-300 mb-1"
+              >Notes & Details</label
+            >
             <textarea
               id="task-desc-input"
               bind:value={formDescription}
@@ -509,7 +591,11 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label for="task-prio-select" class="block text-xs font-medium text-slate-300 mb-1">Priority</label>
+              <label
+                for="task-prio-select"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Priority</label
+              >
               <select
                 id="task-prio-select"
                 bind:value={formPriority}
@@ -523,7 +609,11 @@
             </div>
 
             <div>
-              <label for="task-due-input" class="block text-xs font-medium text-slate-300 mb-1">Due Date</label>
+              <label
+                for="task-due-input"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Due Date</label
+              >
               <input
                 id="task-due-input"
                 type="date"
@@ -535,7 +625,11 @@
 
           {#if contentItems.length > 0}
             <div>
-              <label for="task-content-link" class="block text-xs font-medium text-slate-300 mb-1">Link to Video (optional)</label>
+              <label
+                for="task-content-link"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Link to Video (optional)</label
+              >
               <select
                 id="task-content-link"
                 bind:value={formContentItemId}
@@ -543,14 +637,20 @@
               >
                 <option value="">None</option>
                 {#each contentItems as item}
-                  <option value={String(item.id)}>{item.title} ({item.platform})</option>
+                  <option value={String(item.id)}
+                    >{item.title} ({item.platform})</option
+                  >
                 {/each}
               </select>
             </div>
           {/if}
 
           <div>
-            <label for="task-checklist-input" class="block text-xs font-medium text-slate-300 mb-1">Checklist Steps (one per line)</label>
+            <label
+              for="task-checklist-input"
+              class="block text-xs font-medium text-slate-300 mb-1"
+              >Checklist Steps (one per line)</label
+            >
             <textarea
               id="task-checklist-input"
               bind:value={formChecklistRaw}
@@ -560,7 +660,9 @@
             ></textarea>
           </div>
 
-          <div class="flex justify-end gap-2 pt-3 border-t border-purple-900/30">
+          <div
+            class="flex justify-end gap-2 pt-3 border-t border-purple-900/30"
+          >
             <button
               type="button"
               onclick={() => (showModal = false)}
@@ -572,7 +674,7 @@
               type="submit"
               class="px-5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-semibold text-xs transition-all"
             >
-              {editingTaskId ? 'Save Changes' : 'Save Task'}
+              {editingTaskId ? "Save Changes" : "Save Task"}
             </button>
           </div>
         </form>

@@ -3,6 +3,7 @@
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
   import { resolveAvatarUrl, resolveMediaUrl, handleAvatarError, handleThumbnailError } from '../../utils/avatar';
+  import { portal } from '../../utils/portal';
   import LoadError from '../layout/LoadError.svelte';
   import type {
     AnalyticsSummary,
@@ -1074,7 +1075,7 @@
 
 <!-- Modal: Connect Channel / Platform-Semantic Stats -->
 {#if showModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
     <div class="swiss-card w-full max-w-lg p-6 border border-amber-400/60 bg-[#12071f] space-y-5 shadow-2xl">
       <div class="flex items-center justify-between border-b border-purple-900/50 pb-3">
         <div class="flex items-center gap-2">
@@ -1308,7 +1309,7 @@
 
 <!-- Comprehensive Performance Review Intelligence Modal -->
 {#if showReviewModal && aiReview}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in overflow-y-auto">
+  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 sm:p-6 animate-in fade-in overflow-y-auto">
     <div class="swiss-card w-full max-w-3xl max-h-[90vh] flex flex-col border-2 border-amber-400/70 bg-[#12071f] shadow-2xl overflow-hidden my-auto">
       <!-- Modal Header -->
       <div class="flex items-center justify-between p-5 border-b border-purple-900/60 bg-[#170a27] shrink-0">

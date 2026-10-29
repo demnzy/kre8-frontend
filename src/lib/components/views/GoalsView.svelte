@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import { portal } from '../../utils/portal';
   import LoadError from '../layout/LoadError.svelte';
   import type { Goal } from '../../types';
   import {
@@ -271,7 +272,7 @@
 
   <!-- Create / Edit Goal Modal -->
   {#if showModal}
-    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+    <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
       <button
         type="button"
         onclick={() => (showModal = false)}

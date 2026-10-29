@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { appState } from '../../stores/appState.svelte';
 	import { api } from '../../api/client';
+	import { portal } from '../../utils/portal';
 	import { AI_PROVIDERS, getProviderConfig, getSavedKeyForProvider } from '../../utils/aiProviders';
 	import type { AIConnectionStatus } from '../../types';
 	import { Key, Check, RefreshCw, Eye, EyeOff, ExternalLink, Wifi, AlertCircle, X } from 'lucide-svelte';
@@ -123,7 +124,7 @@
 </script>
 
 {#if appState.apiKeyModalOpen}
-	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+	<div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
 		<button
 			type="button"
 			onclick={() => (appState.apiKeyModalOpen = false)}

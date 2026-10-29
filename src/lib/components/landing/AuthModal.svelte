@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appState } from '../../stores/appState.svelte';
   import { api, authStorage } from '../../api/client';
+  import { portal } from '../../utils/portal';
   import type { OnboardingSuggestions } from '../../types';
   import Kre8Logo from '../ui/Kre8Logo.svelte';
   import {
@@ -393,7 +394,7 @@
 </script>
 
 {#if appState.authModalOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
     <!-- Click backdrop to close -->
     <button
       type="button"

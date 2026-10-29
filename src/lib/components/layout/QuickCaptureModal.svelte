@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appState } from '../../stores/appState.svelte';
   import { api } from '../../api/client';
+  import { portal } from '../../utils/portal';
   import { X, Lightbulb, Video, CheckSquare, StickyNote, Plus } from 'lucide-svelte';
 
   type CaptureType = 'idea' | 'content' | 'task' | 'note';
@@ -95,7 +96,7 @@
 </script>
 
 {#if appState.quickCaptureOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+  <div use:portal class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
     <!-- Click backdrop to close -->
     <button
       type="button"

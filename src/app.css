@@ -92,7 +92,8 @@
 
 .reveal-init.in-view {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
+  will-change: auto;
 }
 
 .reveal-delay-100 { transition-delay: 100ms; }
@@ -115,11 +116,10 @@
 @keyframes viewEnter {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -165,7 +165,7 @@
 }
 
 .view-enter {
-  animation: viewEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: viewEnter 0.2s ease-out forwards;
 }
 
 .modal-spring {

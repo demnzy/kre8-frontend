@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { portal } from '../../utils/portal';
   import { appState, type AppModule } from '../../stores/appState.svelte';
   import {
     Search,
@@ -93,7 +94,7 @@
 </script>
 
 {#if appState.commandPaletteOpen}
-  <div class="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+  <div use:portal class="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
     <!-- Click backdrop to close -->
     <button
       type="button"
