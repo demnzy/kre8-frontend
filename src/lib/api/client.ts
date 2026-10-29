@@ -28,7 +28,9 @@ import type {
   AIConnectionStatus,
   AIPromptTestResult,
   AIReviseScriptPayload,
-  AIReviseScriptResult
+  AIReviseScriptResult,
+  VoiceOption,
+  VoiceQuota
 } from '../types';
 import { connection } from '../stores/connection.svelte';
 
@@ -386,6 +388,35 @@ export const api = {
     request<Script>(`/scripts/${id}`, { method: 'PUT', body: JSON.stringify(script) }),
   deleteScript: (id: number) =>
     request<{ message: string }>(`/scripts/${id}`, { method: 'DELETE' }),
+
+  // Voice & TTS (Nu-Voice Kokoro / MMS)
+  getVoiceQuota: () => request<VoiceQuota>('/voice/quota'),
+  getVoiceOptions: () => request<VoiceOption[]>('/voice/voices'),
+  synthesizeClipAudio: (
+    scriptId: number,
+    clipId: number,
+    payload: { spoken_dialogue?: string; voice_id?: string; format?: string } = {}
+  ) =>
+    request<ScriptClip>(`/voice/scripts/${scriptId}/synthesize-clip/${clipId}`, {
+      timeoutMs: AI_TIMEOUT_MS,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  synthesizeFullScriptAudio: (
+    scriptId: number,
+    payload: { voice_id?: string; format?: string } = {}
+  ) =>
+    request<Script>(`/voice/scripts/${scriptId}/synthesize-all`, {
+      timeoutMs: AI_TIMEOUT_MS,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  getAudioUrl: (urlOrFilename: string) => {
+    if (!urlOrFilename) return '';
+    if (urlOrFilename.startsWith('http')) return urlOrFilename;
+    return urlOrFilename.startsWith('/') ? urlOrFilename : `/api/voice/audio/${urlOrFilename}`;
+  },
+  getMasterAudioDownloadUrl: (scriptId: number) => `/api/voice/scripts/${scriptId}/download-master`,
 
   // Tasks
   getTasks: (params?: { is_completed?: boolean; priority?: string }) => {

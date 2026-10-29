@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { portal } from '../../utils/portal';
+  import { api } from '../../api/client';
   import type { Script, ScriptClip } from '../../types';
   import {
     Play,
@@ -75,6 +76,28 @@
   let containerEl = $state<HTMLElement | null>(null);
   let animFrameId: number | null = null;
   let lastTimestamp: number | null = null;
+
+  // Audio Follow / Voiceover synchronization state
+  let audioEl = $state<HTMLAudioElement | null>(null);
+  let isAudioSyncEnabled = $state(false);
+
+  let hasAudioAvailable = $derived.by(() => {
+    return !!script.full_audio_url || (script.clips && script.clips.some((c) => !!c.audio_url));
+  });
+
+  let currentSceneAudioUrl = $derived.by(() => {
+    const clip = script.clips?.[currentSceneIndex];
+    if (clip?.audio_url) {
+      return api.getAudioUrl(clip.audio_url);
+    }
+    return null;
+  });
+
+  $effect(() => {
+    if (audioEl) {
+      audioEl.playbackRate = playbackSpeed;
+    }
+  });
 
   // Prepare scenes from clips or fallback to full_script parsing
   let preparedScenes = $derived.by<PreparedScene[]>(() => {
@@ -333,6 +356,15 @@
     lastTimestamp = null;
     if (animFrameId) cancelAnimationFrame(animFrameId);
     animFrameId = requestAnimationFrame(onFrame);
+
+    if (isAudioSyncEnabled && audioEl && currentSceneAudioUrl) {
+      if (audioEl.src !== currentSceneAudioUrl) {
+        audioEl.src = currentSceneAudioUrl;
+      }
+      audioEl.currentTime = elapsedSceneMs / 1000;
+      audioEl.playbackRate = playbackSpeed;
+      audioEl.play().catch(() => {});
+    }
   }
 
   function pause() {
@@ -340,6 +372,9 @@
     if (animFrameId) {
       cancelAnimationFrame(animFrameId);
       animFrameId = null;
+    }
+    if (audioEl && !audioEl.paused) {
+      audioEl.pause();
     }
   }
 
@@ -365,10 +400,14 @@
     if (lastTimestamp === null) {
       lastTimestamp = timestamp;
     }
-    const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
-    lastTimestamp = timestamp;
 
-    elapsedSceneMs += deltaMs;
+    if (isAudioSyncEnabled && audioEl && !audioEl.paused && !audioEl.ended) {
+      elapsedSceneMs = audioEl.currentTime * 1000;
+    } else {
+      const deltaMs = (timestamp - lastTimestamp) * playbackSpeed;
+      elapsedSceneMs += deltaMs;
+    }
+    lastTimestamp = timestamp;
 
     const sceneDurationMs = (activeScene?.duration || 10) * 1000;
     if (elapsedSceneMs >= sceneDurationMs) {
@@ -438,6 +477,10 @@
     pausedOnScroll = false;
     isTransitioningScene = false;
     if (transitionTimer) clearTimeout(transitionTimer);
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.currentTime = 0;
+    }
     if (containerEl) {
       containerEl.scrollTo({ top: 0, behavior: 'auto' });
     }
@@ -479,6 +522,9 @@
   function seekToWord(token: Token) {
     if (token.startTime !== undefined) {
       elapsedSceneMs = token.startTime * 1000;
+      if (isAudioSyncEnabled && audioEl) {
+        audioEl.currentTime = token.startTime;
+      }
       pausedOnScroll = false;
       scrollToActiveWord();
     }
@@ -596,6 +642,19 @@
     role="region"
     aria-label="Teleprompter Studio"
   >
+    <audio
+      bind:this={audioEl}
+      onended={() => {
+        if (isPlaying) {
+          if (currentSceneIndex < preparedScenes.length - 1) {
+            transitionToNextScene();
+          } else {
+            pause();
+          }
+        }
+      }}
+      preload="auto"
+    ></audio>
     <!-- Single Sleek Top Bar (Auto-dims during recording unless hovered) -->
     <header
       class="h-14 px-5 bg-[#090412]/95 backdrop-blur-md border-b border-purple-900/40 flex items-center justify-between gap-4 shrink-0 z-30 transition-opacity duration-300 {
@@ -689,6 +748,33 @@
           <Wind class="w-3.5 h-3.5 text-cyan-400" />
           <span class="hidden sm:inline text-[11px]">Breaths</span>
         </button>
+
+        <!-- Voiceover Audio Sync Toggle -->
+        {#if hasAudioAvailable}
+          <button
+            type="button"
+            onclick={() => {
+              isAudioSyncEnabled = !isAudioSyncEnabled;
+              if (!isAudioSyncEnabled && audioEl) {
+                audioEl.pause();
+              } else if (isAudioSyncEnabled && isPlaying && audioEl && currentSceneAudioUrl) {
+                audioEl.src = currentSceneAudioUrl;
+                audioEl.currentTime = elapsedSceneMs / 1000;
+                audioEl.playbackRate = playbackSpeed;
+                audioEl.play().catch(() => {});
+              }
+            }}
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-colors {
+              isAudioSyncEnabled
+                ? 'bg-emerald-950/90 border-emerald-500 text-emerald-300 ring-1 ring-emerald-400/40 shadow-sm'
+                : 'bg-black border-purple-900/60 text-slate-400 hover:text-white'
+            }"
+            title="Follow spoken voiceover audio in sync with highlighter"
+          >
+            <Volume2 class="w-3.5 h-3.5 {isAudioSyncEnabled ? 'text-emerald-400' : 'text-slate-400'}" />
+            <span class="hidden sm:inline text-[11px]">Voice Sync</span>
+          </button>
+        {/if}
 
         <!-- Eye-Level Guide Toggle -->
         <button

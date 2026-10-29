@@ -23,11 +23,14 @@
     FolderOpen,
     Users,
     Zap,
-    Play
+    Play,
+    Volume2,
+    Mic
   } from 'lucide-svelte';
   import { reveal } from '../../utils/reveal';
   import LoadError from '../layout/LoadError.svelte';
   import ScriptTeleprompterModal from './ScriptTeleprompterModal.svelte';
+  import ScriptVoiceoverModal from './ScriptVoiceoverModal.svelte';
 
   let scripts = $state<Script[]>([]);
   let contentItems = $state<ContentItem[]>([]);
@@ -41,6 +44,7 @@
   let pendingCustomInstructions = $state<string | undefined>(undefined);
   let showTeleprompter = $state(false);
   let teleprompterInitialSceneIndex = $state(0);
+  let showVoiceoverModal = $state(false);
 
   // Script Revision Co-Pilot state
   let isRevising = $state(false);
@@ -582,6 +586,19 @@
       </div>
 
       <div class="flex items-center gap-2 shrink-0">
+        <button
+          onclick={() => (showVoiceoverModal = true)}
+          disabled={!activeScript || (!activeScript.full_script && (!activeScript.clips || activeScript.clips.length === 0))}
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-black border border-purple-900 hover:border-amber-400 text-amber-300 text-xs font-mono transition-all disabled:opacity-50"
+          title="Synthesize and manage spoken voiceover audio"
+        >
+          <Volume2 class="w-3.5 h-3.5 text-amber-400" />
+          <span>Voiceover</span>
+          {#if activeScript?.full_audio_url}
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          {/if}
+        </button>
+
         <button
           onclick={() => {
             teleprompterInitialSceneIndex = 0;
@@ -1158,6 +1175,18 @@
                         <span>s</span>
                       </div>
 
+                      {#if clip.audio_url}
+                        <button
+                          type="button"
+                          onclick={() => (showVoiceoverModal = true)}
+                          class="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-950/70 border border-emerald-800/80 text-[10px] font-mono text-emerald-300 hover:bg-emerald-900/60 rounded"
+                          title="Voiceover audio ready • Click to view in Voiceover studio"
+                        >
+                          <Volume2 class="w-3 h-3 text-emerald-400" />
+                          <span>Voice</span>
+                        </button>
+                      {/if}
+
                       <button
                         type="button"
                         onclick={() => {
@@ -1231,6 +1260,17 @@
       isOpen={showTeleprompter}
       initialSceneIndex={teleprompterInitialSceneIndex}
       onClose={() => (showTeleprompter = false)}
+    />
+
+    <ScriptVoiceoverModal
+      script={activeScript}
+      isOpen={showVoiceoverModal}
+      onClose={() => (showVoiceoverModal = false)}
+      onScriptUpdated={(updated) => {
+        activeScript = updated;
+        const idx = scripts.findIndex((s) => s.id === updated.id);
+        if (idx !== -1) scripts[idx] = updated;
+      }}
     />
   {/if}
 </div>

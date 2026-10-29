@@ -158,6 +158,8 @@ export interface ScriptClip {
   visual_direction?: string;
   transition?: string;
   cta?: string;
+  audio_url?: string;
+  audio_duration?: number;
 }
 
 export interface ScriptVersion {
@@ -205,12 +207,32 @@ export interface Script {
   tone: string;
   target_duration_seconds: number;
   full_script?: string;
+  full_audio_url?: string;
+  voice_id?: string;
   generated_hooks: string[];
   generated_ctas: string[];
   clips: ScriptClip[];
   versions?: ScriptVersion[];
   created_at: string;
   updated_at: string;
+}
+
+export interface VoiceOption {
+  id: string;
+  name: string;
+  language: string;
+  language_name: string;
+  gender: string;
+  engine: string;
+  sample_rate: number;
+}
+
+export interface VoiceQuota {
+  subscription_tier: string;
+  voiceover_generations_used: number;
+  voiceover_generations_limit: number;
+  remaining: number;
+  is_unlimited: boolean;
 }
 
 export interface TaskChecklistItem {
